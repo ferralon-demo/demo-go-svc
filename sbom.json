@@ -1,1 +1,1 @@
-{"packages":[{"ecosystem":"Go","name":"github.com/prometheus/client_golang","version":"v1.11.1","purl":"pkg:golang/github.com/prometheus/client_golang"},{"ecosystem":"Go","name":"golang.org/x/text","version":"v0.3.6","purl":"pkg:golang/golang.org/x/text"}]}
+{"packages":[{"ecosystem":"Go","name":"github.com/prometheus/client_golang","version":"v1.11.1","purl":"pkg:golang/github.com/prometheus/client_golang"},{"ecosystem":"Go","name":"golang.org/x/text","version":"v0.21.0","purl":"pkg:golang/golang.org/x/text"}]}
