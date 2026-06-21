@@ -7,8 +7,6 @@
 // The service exposes a tiny "link preview" style API:
 //
 //	GET /healthz            liveness probe
-//	GET /preview?target=…   fetch a remote URL and report its status (the SSRF surface)
-//	GET /expand?count=…     allocate a working buffer of the requested size (the DoS surface)
 //	GET /locale             report the server's default locale
 //
 // Naming note: nothing user-visible here references the scanner or its brand; this is
@@ -44,10 +42,10 @@ func main() {
 	// compile-time constant — a real control-flow path to the symbol with no external input.
 	log.Printf("default locale: %s", defaultLocale())
 
+	// The patched ref removes the /preview (SSRF) and /expand (DoS) endpoints entirely; the
+	// attacker-controllable ingress to those sinks no longer exists.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthzHandler)
-	mux.HandleFunc("/preview", fetchHandler)
-	mux.HandleFunc("/expand", expandHandler)
 	mux.HandleFunc("/locale", localeHandler)
 
 	addr := "127.0.0.1:8080"
