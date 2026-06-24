@@ -1,0 +1,108 @@
+# Ferralon Assessment — free, deterministic dependency-advisory scan, run in this
+# repository's own GitHub runner.
+#
+# NAME IS A PLACEHOLDER. "Ferralon Assessment" is a working, clearly-Ferralon name; the
+# final customer-facing scanner/workflow name is an OPERATOR DECISION surfaced by mission
+# AGA-003 (it must be Ferralon-branded — not the engine codename, and not the engine's
+# "Nucleon" stealth placeholder). Rename here + in FERRALON_SCAN.md once decided.
+#
+# What it does, in the runner (no source leaves the repo):
+#   1. runs the prebuilt Ferralon scanner over this Go module -> a schema-valid
+#      tegron.report.v1 report.json (the neutral scan spine);
+#   2. on push to main, persists the StateStore to refs/tegron/state (the ref the
+#      backend's in-repo reader keys off — pinned by cross-team contract, ADR-0015);
+#   3. files a Ferralon-branded, codename-free pivot Issue linking to the console;
+#   4. POSTs a thin metadata allowlist (no source / no PII) to the backend's OIDC ingest
+#      endpoint — gated on the Operator having configured the endpoint variable.
+#
+# The scanner's OWN Tier-1 surfaces (its generic pinned Issue / sticky PR comment / SARIF
+# upload) are turned OFF — Ferralon owns the customer-facing surfaces (the pivot Issue
+# above). The binary is vendored under bin/ (the simplest honest path for the demo;
+# proper distribution is a flagged follow-on — see FERRALON_SCAN.md).
+
+name: Ferralon Assessment
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  assess:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # persist the StateStore ref (refs/tegron/state) on push to main
+      issues: write        # file/update the Ferralon pivot Issue
+      id-token: write      # request the GitHub Actions OIDC token for the ingest POST
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.3"
+          cache: false
+
+      - name: Warm the module cache for this module
+        run: go build ./...
+
+      - name: Run the Ferralon assessment scan
+        id: scan
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          # Turn OFF the scanner's own customer-facing surfaces — Ferralon files its own
+          # pivot Issue below. (Env prefix is the vendored build's identity; '0' = off.)
+          NUCLEON_ISSUE: "0"
+          NUCLEON_PR_COMMENT: "0"
+          NUCLEON_CODE_SCANNING: "0"
+        run: |
+          chmod +x bin/ferralon-scan bin/ferralon-scan-plugin
+          mkdir -p "$RUNNER_TEMP/out"
+          # Persist the durable StateStore ref only on push to main. A PR run stays
+          # stateless so it never overwrites the baseline; -repo writes refs/tegron/state.
+          REPO_FLAG=""
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            REPO_FLAG="-repo ${{ github.repository }}"
+          fi
+          ./bin/ferralon-scan baseline \
+            -target . \
+            -out "$RUNNER_TEMP/out" \
+            -plugin-go "$GITHUB_WORKSPACE/bin/ferralon-scan-plugin" \
+            -subject-repo "${{ github.repository }}" \
+            -revision "${{ github.ref_name }}" \
+            -commit "${{ github.sha }}" \
+            -ref "refs/tegron/state" \
+            $REPO_FLAG
+          echo "out=$RUNNER_TEMP/out" >> "$GITHUB_OUTPUT"
+
+      - name: Branding wall — codename absent from authored surfaces
+        run: ./.ferralon/check_branding.sh
+
+      - name: Upload the scan report bundle (build artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ferralon-scan-report
+          path: |
+            ${{ steps.scan.outputs.out }}/report.json
+            ${{ steps.scan.outputs.out }}/openvex.json
+          if-no-files-found: error
+
+      - name: File the Ferralon pivot Issue
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT: ${{ steps.scan.outputs.out }}/report.json
+        run: ./.ferralon/file_pivot_issue.sh
+
+      - name: POST the thin allowlist to the Ferralon OIDC ingest
+        # Wired but dormant until the Operator sets the FERRALON_INGEST_URL repo/org
+        # variable (the live deployed-backend ingest is the separate INFRA-deploy track;
+        # AGA-003 verified this call against the LOCAL backend substrate only).
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.FERRALON_INGEST_URL != ''
+        env:
+          FERRALON_INGEST_URL: ${{ vars.FERRALON_INGEST_URL }}
+          FERRALON_INGEST_AUD: ${{ vars.FERRALON_INGEST_AUD || 'ferralon-ingest' }}
+          REPORT: ${{ steps.scan.outputs.out }}/report.json
+        run: ./.ferralon/post_ingest.sh
