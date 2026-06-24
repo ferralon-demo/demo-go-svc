@@ -1,12 +1,8 @@
-# Ferralon Assessment
-
-> **Name note.** "Ferralon Assessment" is a working placeholder. The final
-> customer-facing scanner name is an open Operator decision (it will be
-> Ferralon-branded — never an internal codename).
+# Ferralon Assay
 
 This repository runs a **free, deterministic dependency-advisory scan** in its own
 GitHub Actions runner on every push and pull request
-([`.github/workflows/ferralon-assessment.yml`](.github/workflows/ferralon-assessment.yml)).
+([`.github/workflows/ferralon-assay.yml`](.github/workflows/ferralon-assay.yml)).
 
 ## What it does — and what it does not
 

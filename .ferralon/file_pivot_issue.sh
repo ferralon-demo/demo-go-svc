@@ -20,7 +20,7 @@ REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 HANDLE="$(basename "$REPO")"               # the console /r/<handle> selector
 CONSOLE_URL="https://console.ferralon.com/r/${HANDLE}"
 MARKER="<!-- ferralon-assessment-pivot -->"
-TITLE="Ferralon Assessment - dependency advisory candidates"
+TITLE="Ferralon Assay - dependency advisory candidates"
 
 # Honest verdict counts (candidate framing). No advisory ids are read out.
 counts="$(python3 -c '
@@ -40,7 +40,7 @@ BODY_FILE="$(mktemp)"
 trap 'rm -f "$BODY_FILE"' EXIT
 cat > "$BODY_FILE" <<EOF
 ${MARKER}
-## Ferralon Assessment
+## Ferralon Assay
 
 A free, deterministic dependency-advisory scan ran in this repository own runner.
 No source code leaves your environment - the scan reads your dependency graph and the
@@ -67,7 +67,7 @@ candidate, and - with your consent - the paid **Prove** escalation that produces
 reproducible Proof of Exploitability (or a Proof of Non-Exploitability) for a chosen
 candidate.
 
-<sub>Filed automatically by the Ferralon Assessment workflow. Re-runs update this Issue in place.</sub>
+<sub>Filed automatically by the Ferralon Assay workflow. Re-runs update this Issue in place.</sub>
 EOF
 
 existing="$(gh issue list --repo "$REPO" --state open --search "$MARKER in:body" \

@@ -1,10 +1,10 @@
-# Ferralon Assessment — free, deterministic dependency-advisory scan, run in this
+# Ferralon Assay — free, deterministic dependency-advisory scan, run in this
 # repository's own GitHub runner.
 #
-# NAME IS A PLACEHOLDER. "Ferralon Assessment" is a working, clearly-Ferralon name; the
-# final customer-facing scanner/workflow name is an OPERATOR DECISION surfaced by mission
-# AGA-003 (it must be Ferralon-branded — not the engine codename, and not the engine's
-# "Nucleon" stealth placeholder). Rename here + in FERRALON_SCAN.md once decided.
+# The app is Ferralon; the free-scan operation it performs is the Assay — so the
+# customer-facing name is "Ferralon Assay". It stays Ferralon-branded by construction:
+# never the engine codename, and never the engine's "Nucleon" stealth placeholder. Keep
+# this name in sync with FERRALON_SCAN.md.
 #
 # What it does, in the runner (no source leaves the repo):
 #   1. runs the prebuilt Ferralon scanner over this Go module -> a schema-valid
@@ -20,7 +20,7 @@
 # above). The binary is vendored under bin/ (the simplest honest path for the demo;
 # proper distribution is a flagged follow-on — see FERRALON_SCAN.md).
 
-name: Ferralon Assessment
+name: Ferralon Assay
 
 on:
   push:
@@ -48,7 +48,7 @@ jobs:
       - name: Warm the module cache for this module
         run: go build ./...
 
-      - name: Run the Ferralon assessment scan
+      - name: Run the Ferralon Assay
         id: scan
         env:
           GITHUB_TOKEN: ${{ github.token }}
