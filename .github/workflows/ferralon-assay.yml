@@ -9,7 +9,7 @@
 # What it does, in the runner (no source leaves the repo):
 #   1. runs the prebuilt Ferralon scanner over this Go module -> a schema-valid
 #      tegron.report.v1 report.json (the neutral scan spine);
-#   2. on push to main, persists the StateStore to refs/tegron/state (the ref the
+#   2. on the default branch, persists the StateStore to refs/tegron/state (the ref the
 #      backend's in-repo reader keys off — pinned by cross-team contract, ADR-0015);
 #   3. files a Ferralon-branded, codename-free pivot Issue linking to the console;
 #   4. POSTs a thin metadata allowlist (no source / no PII) to the backend's OIDC ingest
@@ -23,8 +23,15 @@
 name: Ferralon Assay
 
 on:
+  # Top of funnel: the assessment is scheduled + on-demand dispatchable (the App will
+  # dispatch on its own schedule; for the demo the daily cron + workflow_dispatch stand
+  # in). A push also refreshes posture, and a pull_request is the per-change check. Which
+  # events MUTATE the repo singletons is decided by the default-branch gate below, not by
+  # this trigger list — so the triggers stay broad and the gate stays the single guard.
+  schedule:
+    - cron: "17 7 * * *"   # daily, deliberately off the top of the hour
+  workflow_dispatch:
   push:
-    branches: [main]
   pull_request:
 
 permissions:
@@ -34,7 +41,7 @@ jobs:
   assess:
     runs-on: ubuntu-latest
     permissions:
-      contents: write      # persist the StateStore ref (refs/tegron/state) on push to main
+      contents: write      # persist the StateStore ref (refs/tegron/state) on the default branch
       issues: write        # file/update the Ferralon pivot Issue
       id-token: write      # request the GitHub Actions OIDC token for the ingest POST
     steps:
@@ -60,10 +67,11 @@ jobs:
         run: |
           chmod +x bin/ferralon-scan bin/ferralon-scan-plugin
           mkdir -p "$RUNNER_TEMP/out"
-          # Persist the durable StateStore ref only on push to main. A PR run stays
-          # stateless so it never overwrites the baseline; -repo writes refs/tegron/state.
+          # Persist the durable StateStore ref only on the default branch (the baseline
+          # posture). A PR run — github.ref_name is "<n>/merge" — stays stateless so it
+          # never overwrites the baseline; -repo writes refs/tegron/state.
           REPO_FLAG=""
-          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
+          if [ "${{ github.ref_name == github.event.repository.default_branch }}" = "true" ]; then
             REPO_FLAG="-repo ${{ github.repository }}"
           fi
           ./bin/ferralon-scan baseline \
@@ -90,7 +98,7 @@ jobs:
           if-no-files-found: error
 
       - name: File the Ferralon pivot Issue
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.ref_name == github.event.repository.default_branch
         env:
           GH_TOKEN: ${{ github.token }}
           REPORT: ${{ steps.scan.outputs.out }}/report.json
@@ -100,7 +108,7 @@ jobs:
         # Wired but dormant until the Operator sets the FERRALON_INGEST_URL repo/org
         # variable (the live deployed-backend ingest is the separate INFRA-deploy track;
         # AGA-003 verified this call against the LOCAL backend substrate only).
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.FERRALON_INGEST_URL != ''
+        if: github.ref_name == github.event.repository.default_branch && vars.FERRALON_INGEST_URL != ''
         env:
           FERRALON_INGEST_URL: ${{ vars.FERRALON_INGEST_URL }}
           FERRALON_INGEST_AUD: ${{ vars.FERRALON_INGEST_AUD || 'ferralon-ingest' }}
