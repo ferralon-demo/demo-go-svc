@@ -1,0 +1,7 @@
+# Keep the build context lean: the proof sandbox only needs the Go sources and module files.
+.git
+.github
+.ferralon
+bin/
+demo-go-svc
+*.md
