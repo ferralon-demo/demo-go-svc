@@ -6,6 +6,7 @@
 //
 // The service exposes a tiny "link preview" style API:
 //
+//	GET /                   greet in the caller's Accept-Language (the GO-2021-0113 parse surface)
 //	GET /healthz            liveness probe
 //	GET /preview?target=…   fetch a remote URL and report its status (the SSRF surface)
 //	GET /expand?count=…     allocate a working buffer of the requested size (the DoS surface)
@@ -45,6 +46,7 @@ func main() {
 	log.Printf("default locale: %s", defaultLocale())
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("/", negotiateHandler)
 	mux.HandleFunc("/healthz", healthzHandler)
 	mux.HandleFunc("/preview", fetchHandler)
 	mux.HandleFunc("/expand", expandHandler)

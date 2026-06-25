@@ -39,9 +39,28 @@ carrying the planted seed to the OOB endpoint.
 - **Ref:** `patched` — fix **mode 2 (code-fix patched ref)**: the `/preview` (SSRF) and
   `/expand` (DoS) endpoints are removed, so the same trigger 404s and nothing is beaconed →
   `not_exploitable`. The `patched` ref carries the same `Dockerfile` so it builds and runs.
-- For the dependency-advisory vuln **GO-2021-0113** the fix would instead be **mode 1 (go.mod
-  version bump** `golang.org/x/text v0.3.6 → v0.3.7`); it is not the recommended fire because
-  its path is reachable-but-untainted (constant input), not attacker-tainted.
+- For the dependency-advisory vuln **GO-2021-0113** the fix is **mode 1 (go.mod version bump**
+  `golang.org/x/text v0.3.6 → v0.3.7`): v0.3.7 no longer faults on a malformed tag, so the same
+  Accept-Language trigger parses cleanly and nothing is beaconed → `not_exploitable`.
+
+## Alternative fire — GO-2021-0113 (dependency advisory; x/text OOB read)
+
+| Field (tegron-tui)        | Value                                          |
+|---------------------------|------------------------------------------------|
+| Vulnerability ID          | `GO-2021-0113`                                 |
+| Source                    | `osv`                                          |
+| Execution                 | `compose` (or `image`; both build the Dockerfile) |
+
+The `/` route (`negotiateHandler`) parses the **untrusted `Accept-Language` header** with
+`golang.org/x/text/language.Parse` — the GO-2021-0113 sink (CVE-2021-38561, CWE-125). The proof
+pipeline's own live-confirmation trigger drives exactly this surface:
+`sh -c "/server & sleep 1; wget -qO- --header='Accept-Language: en-t-en-orm' http://127.0.0.1:8080/"`.
+The tag `en-t-en-orm` drives the vulnerable parser off the end of its scan buffer
+(`index out of range [7] with length 7`); `negotiateHandler`'s deferred recover is intrinsic to
+that fault and is the only place the seed is read and beaconed (`kind=canary`). A well-formed tag,
+a missing seed, or a patched `x/text >= v0.3.7` never enters recover → no beacon (fail-closed). The
+constant-input `defaultLocale()` path (`main` → `/locale`) remains the reachable-but-untainted use
+the static scan reports honestly; the tainted use is the new `/` ingress.
 
 ## Alternative fire — TEGRON-DOS-0001 (also fires)
 
