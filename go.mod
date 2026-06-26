@@ -4,7 +4,7 @@ go 1.23
 
 require (
 	github.com/prometheus/client_golang v1.11.1
-	golang.org/x/text v0.3.6
+	golang.org/x/text v0.3.7
 )
 
 require (
