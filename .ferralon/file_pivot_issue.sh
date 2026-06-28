@@ -78,7 +78,15 @@ if [ -n "${existing:-}" ] && [ "$existing" != "null" ]; then
   gh issue edit "$existing" --repo "$REPO" --title "$TITLE" --body-file "$BODY_FILE"
 else
   echo "Creating the pivot Issue ..."
-  num="$(gh issue create --repo "$REPO" --title "$TITLE" --body-file "$BODY_FILE" --json number --jq .number 2>/dev/null || true)"
+  # gh issue create has no --json/--jq; it prints the new Issue's URL on stdout on success.
+  # Capture it and assert it is a real GitHub issues URL so a silent create failure fails the step.
+  issue_url="$(gh issue create --repo "$REPO" --title "$TITLE" --body-file "$BODY_FILE")"
+  if [[ ! "$issue_url" =~ ^https://github\.com/.+/issues/[0-9]+$ ]]; then
+    echo "gh issue create did not return an issue URL; got: '${issue_url}'" >&2
+    exit 1
+  fi
+  echo "Filed pivot Issue: ${issue_url}"
+  num="${issue_url##*/}"
   # Best-effort pin (org/repo may cap pinned issues at 3); never fail the run on it.
   if [[ "${num:-}" =~ ^[0-9]+$ ]]; then
     gh issue pin "$num" --repo "$REPO" 2>/dev/null || echo "(could not pin; continuing)"
