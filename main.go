@@ -8,8 +8,6 @@
 //
 //	GET /                   greet in the caller's Accept-Language (the GO-2021-0113 parse surface)
 //	GET /healthz            liveness probe
-//	GET /preview?target=…   fetch a remote URL and report its status (the SSRF surface)
-//	GET /expand?count=…     allocate a working buffer of the requested size (the DoS surface)
 //	GET /locale             report the server's default locale
 //
 // Naming note: nothing user-visible here references the scanner or its brand; this is
@@ -48,8 +46,6 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", negotiateHandler)
 	mux.HandleFunc("/healthz", healthzHandler)
-	mux.HandleFunc("/preview", fetchHandler)
-	mux.HandleFunc("/expand", expandHandler)
 	mux.HandleFunc("/locale", localeHandler)
 
 	addr := "127.0.0.1:8080"

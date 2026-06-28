@@ -10,6 +10,11 @@ import (
 	"golang.org/x/text/language"
 )
 
+// canarySeedPath is the per-assessment seed a proof sandbox plants before exercising the service.
+// Relocated here when the SSRF/DoS endpoints (fetch.go/expand.go) were removed; localeBeacon below
+// is now its only reader.
+const canarySeedPath = "/tmp/tegron_canary"
+
 // defaultLocale parses a compile-time-constant BCP-47 tag. It reaches language.Parse on a
 // reachable control-flow path from main, but no externally supplied data ever flows to it —
 // the argument is a fixed string. This is the reachable-but-untainted use of the symbol that the
