@@ -35,7 +35,10 @@ is closed to anything outside that allowlist by construction).
 - **The Ferralon console** — `https://console.ferralon.com/r/demo-go-svc`.
 - **The Ferralon backend** — a thin metadata allowlist is POSTed to the backend's ingest
   endpoint, authenticated by a GitHub-signed Actions OIDC token bound to this
-  repository's owner. (Activated once the endpoint variable is configured.)
+  repository's owner. This fires automatically on every default-branch run against the
+  deployed backend; the endpoint is a known default (a repo/org variable can still
+  override it). The backend binds the OIDC token to an active install (403 otherwise) —
+  install state, not any workflow variable, is what guards ingest.
 
 ## How the scanner is distributed (and the planned cleanup)
 

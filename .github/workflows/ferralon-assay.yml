@@ -13,7 +13,8 @@
 #      backend's in-repo reader keys off — pinned by cross-team contract, ADR-0015);
 #   3. files a Ferralon-branded, codename-free pivot Issue linking to the console;
 #   4. POSTs a thin metadata allowlist (no source / no PII) to the backend's OIDC ingest
-#      endpoint — gated on the Operator having configured the endpoint variable.
+#      endpoint — fires automatically on every default-branch run against the deployed
+#      backend (the endpoint is a known default; a repo/org var can override).
 #
 # The scanner's OWN Tier-1 surfaces (its generic pinned Issue / sticky PR comment / SARIF
 # upload) are turned OFF — Ferralon owns the customer-facing surfaces (the pivot Issue
@@ -105,12 +106,17 @@ jobs:
         run: ./.ferralon/file_pivot_issue.sh
 
       - name: POST the thin allowlist to the Ferralon OIDC ingest
-        # Wired but dormant until the Operator sets the FERRALON_INGEST_URL repo/org
-        # variable (the live deployed-backend ingest is the separate INFRA-deploy track;
-        # AGA-003 verified this call against the LOCAL backend substrate only).
-        if: github.ref_name == github.event.repository.default_branch && vars.FERRALON_INGEST_URL != ''
+        # Fires on every default-branch run against the deployed backend
+        # (api.ferralon.com/ingest). The endpoint and audience are known constants — our
+        # own infrastructure in code — defaulted here and in post_ingest.sh (its ':-'
+        # defaults); a repo/org var (FERRALON_INGEST_URL / FERRALON_INGEST_AUD) can still
+        # override for testing. This step is NOT a security control: post_ingest.sh
+        # requests a GitHub Actions OIDC token and the backend binds the token's
+        # repository_owner_id to an ACTIVE install (403 otherwise) — install state, not
+        # this step, is the real guard.
+        if: github.ref_name == github.event.repository.default_branch
         env:
-          FERRALON_INGEST_URL: ${{ vars.FERRALON_INGEST_URL }}
+          FERRALON_INGEST_URL: ${{ vars.FERRALON_INGEST_URL || 'https://api.ferralon.com/ingest' }}
           FERRALON_INGEST_AUD: ${{ vars.FERRALON_INGEST_AUD || 'ferralon-ingest' }}
           REPORT: ${{ steps.scan.outputs.out }}/report.json
         run: ./.ferralon/post_ingest.sh
