@@ -11,8 +11,12 @@
 #      tegron.report.v1 report.json (the neutral scan spine);
 #   2. on the default branch, persists the StateStore to refs/tegron/state (the ref the
 #      backend's in-repo reader keys off — pinned by cross-team contract, ADR-0015);
-#   3. files a Ferralon-branded, codename-free pivot Issue linking to the console;
-#   4. POSTs a thin metadata allowlist (no source / no PII) to the backend's OIDC ingest
+#   3. on the default branch, pushes the FULL report.json to the backend's run-snapshot
+#      endpoint (OIDC /runs) and captures the returned {handle, run_id} — the durable,
+#      addressable record of this specific run (ADR 0023 D5);
+#   4. files a Ferralon-branded, codename-free pivot Issue linking to the console — both
+#      the baseline bookmark and the frozen run-scoped view, from the handle + run_id above;
+#   5. POSTs a thin metadata allowlist (no source / no PII) to the backend's OIDC ingest
 #      endpoint — fires automatically on every default-branch run against the deployed
 #      backend (the endpoint is a known default; a repo/org var can override).
 #
@@ -98,11 +102,33 @@ jobs:
             ${{ steps.scan.outputs.out }}/openvex.json
           if-no-files-found: error
 
+      - name: Push the full run snapshot to the Ferralon /runs endpoint
+        # Runs BEFORE the pivot Issue: it POSTs the full report.json to the run-snapshot
+        # endpoint (api.ferralon.com/runs) and returns the backend-minted {handle, run_id}
+        # the Issue links to. Same OIDC token + audience as the ingest step below; the body
+        # is the FULL tegron.report.v1 report (stored verbatim), not the thin ingest
+        # allowlist. Default-branch only (the baseline is what gets a durable, addressable
+        # run). The endpoint/audience are known constants (our own infrastructure in code),
+        # defaulted here and in post_runs.sh; a repo/org var (FERRALON_RUNS_URL /
+        # FERRALON_RUNS_AUD) can override for testing. Fails the step on any non-200 — the
+        # Issue step that consumes its outputs never runs without a real handle + run_id.
+        id: runs_push
+        if: github.ref_name == github.event.repository.default_branch
+        env:
+          FERRALON_RUNS_URL: ${{ vars.FERRALON_RUNS_URL || 'https://api.ferralon.com/runs' }}
+          FERRALON_RUNS_AUD: ${{ vars.FERRALON_RUNS_AUD || 'ferralon-ingest' }}
+          REPORT: ${{ steps.scan.outputs.out }}/report.json
+        run: ./.ferralon/post_runs.sh
+
       - name: File the Ferralon pivot Issue
         if: github.ref_name == github.event.repository.default_branch
         env:
           GH_TOKEN: ${{ github.token }}
           REPORT: ${{ steps.scan.outputs.out }}/report.json
+          # The backend-minted handle + authoritative run_id from the run-snapshot push —
+          # the Issue composes its two run-addressable console links from these.
+          FERRALON_RUN_HANDLE: ${{ steps.runs_push.outputs.handle }}
+          FERRALON_RUN_ID: ${{ steps.runs_push.outputs.run_id }}
         run: ./.ferralon/file_pivot_issue.sh
 
       - name: POST the thin allowlist to the Ferralon OIDC ingest
