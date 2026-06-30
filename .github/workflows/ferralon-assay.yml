@@ -37,6 +37,13 @@ on:
     - cron: "17 7 * * *"   # daily, deliberately off the top of the hour
   workflow_dispatch:
   push:
+    # Scope push to the default branch so a branch that already has an open PR doesn't
+    # raise BOTH a push and a pull_request check on the same SHA (two identical "assess"
+    # checks). pull_request is the per-change check while a PR is open; this push refreshes
+    # the baseline posture once a change merges. NOTE: trigger branches: filters can't use a
+    # ${{ ...default_branch }} expression, so the default branch is hardcoded here — if the
+    # demo repo's default branch ever changes from "vulnerable", update this filter in lockstep.
+    branches: [vulnerable]
   pull_request:
 
 permissions:
@@ -44,6 +51,10 @@ permissions:
 
 jobs:
   assess:
+    # Branded display name for the per-commit status check (the job id stays `assess`;
+    # this `name:` is what surfaces to users on the PR/commit). Kept in sync with the
+    # workflow `name:` above and FERRALON_SCAN.md's branding-name note.
+    name: Ferralon Assay
     runs-on: ubuntu-latest
     permissions:
       contents: write      # persist the StateStore ref (refs/tegron/state) on the default branch
