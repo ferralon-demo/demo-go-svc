@@ -12,13 +12,27 @@
 # Idempotent: a hidden marker locates a prior Issue to update in place, so re-runs do
 # not pile up duplicate Issues.
 #
-# Env: GH_TOKEN (issues:write), REPORT (path to report.json), GITHUB_REPOSITORY.
+# Run-addressable links (ADR 0023 D5): the run-snapshot push (post_runs.sh) runs BEFORE
+# this step and returns the backend-minted handle + the authoritative run_id, threaded in
+# as FERRALON_RUN_HANDLE / FERRALON_RUN_ID. The console URL is Notion-style: a DECORATIVE
+# slug (basename of the repo) is prepended to the real handle as "<slug>-<handle>" — the
+# backend ignores the slug and resolves by the trailing handle, so a renamed repo's stale
+# slug still resolves. We emit TWO links: the baseline bookmark (/r/<slug>-<handle>) and
+# the frozen view of the exact run this Issue reports (/r/<slug>-<handle>/runs/<run_id>).
+# If the push did not yield a handle + run_id we FAIL — never a fabricated/guessed URL.
+#
+# Env: GH_TOKEN (issues:write), REPORT (path to report.json), GITHUB_REPOSITORY,
+#      FERRALON_RUN_HANDLE + FERRALON_RUN_ID (from the post_runs.sh push step).
 set -euo pipefail
 
 REPORT="${REPORT:?REPORT (path to report.json) is required}"
 REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
-HANDLE="$(basename "$REPO")"               # the console /r/<handle> selector
-CONSOLE_URL="https://console.ferralon.com/r/${HANDLE}"
+RUN_HANDLE="${FERRALON_RUN_HANDLE:?FERRALON_RUN_HANDLE is required (from the run-snapshot push) — refusing to emit a fabricated URL}"
+RUN_ID="${FERRALON_RUN_ID:?FERRALON_RUN_ID is required (from the run-snapshot push) — refusing to emit a fabricated URL}"
+SLUG="$(basename "$REPO")"                 # decorative Notion-style slug; backend ignores it
+PRETTY="${SLUG}-${RUN_HANDLE}"             # the console /r/<slug>-<handle> selector
+CONSOLE_URL="https://console.ferralon.com/r/${PRETTY}"                    # baseline bookmark
+RUN_URL="https://console.ferralon.com/r/${PRETTY}/runs/${RUN_ID}"        # this frozen run
 MARKER="<!-- ferralon-assessment-pivot -->"
 TITLE="Ferralon Assay - dependency advisory candidates"
 
@@ -60,7 +74,11 @@ proofs of exploitability for this codebase.
 
 ### See the full assessment
 
-➡️ **[Open this repository in the Ferralon console](${CONSOLE_URL})**
+➡️ **[Open this repository in the Ferralon console](${CONSOLE_URL})** - the latest
+baseline posture for this repository (a stable bookmark that tracks the newest run).
+
+🔎 **[View the exact run this Issue reports](${RUN_URL})** - the frozen snapshot of this
+specific scan, preserved for reference even as later runs update the baseline.
 
 The console shows the per-advisory reasoning, the call paths behind each reachable
 candidate, and - with your consent - the paid **Prove** escalation that produces a
