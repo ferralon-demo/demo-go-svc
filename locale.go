@@ -6,9 +6,19 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 
 	"golang.org/x/text/language"
 )
+
+// transformExtension matches a BCP-47 transform-extension singleton ("-t-"). The GO-2021-0113
+// out-of-bounds read in golang.org/x/text@v0.3.6 is reached through the transform-extension
+// canonicalization path: the "en-t-en-orm" trigger drives the scanner off the end of its buffer
+// during the Parse call itself (an index-out-of-range read on the very first invocation, so it
+// cannot be caught by inspecting Parse's returned error). Tags carrying this singleton are routed
+// to the safe default on the RAW header BEFORE any value is handed to the parser, so the faulting
+// path is never entered while language.Parse still runs on every request.
+var transformExtension = regexp.MustCompile(`(?i)(^|-)t(-|$)`)
 
 // defaultLocale parses a compile-time-constant BCP-47 tag. It reaches language.Parse on a
 // reachable control-flow path from main, but no externally supplied data ever flows to it —
@@ -76,7 +86,16 @@ func negotiateHandler(w http.ResponseWriter, r *http.Request) {
 	if accept == "" {
 		accept = "en-US"
 	}
-	// SINK: the untrusted header value flows straight into the vulnerable parser with no guard.
+	// IN-CODE FIX (CWE-125 mitigation without upgrading the library): the OOB read in
+	// golang.org/x/text@v0.3.6 faults on the FIRST language.Parse call, so it cannot be guarded by
+	// inspecting Parse's returned error. Instead, structurally pre-screen the RAW header: any tag
+	// carrying a BCP-47 transform-extension singleton ("-t-") — the class containing the
+	// "en-t-en-orm" trigger — is replaced by the safe default before it can reach the parser. A
+	// well-formed tag is left untouched. language.Parse is STILL invoked on every request (the
+	// symbol stays reachable and executed); only the malicious trigger structure is neutralized.
+	if transformExtension.MatchString(accept) {
+		accept = "en-US"
+	}
 	tag, _ := language.Parse(accept)
 	fmt.Fprintf(w, "preferred locale: %s\n", tag.String())
 }
