@@ -3,8 +3,10 @@ module example.com/demo-go-svc
 go 1.23
 
 require (
+	github.com/nanobox-io/golang-nanoauth v0.0.0-20160722212129-ac0cc4484ad4
 	github.com/prometheus/client_golang v1.11.1
-	golang.org/x/text v0.3.6
+	golang.org/x/crypto v0.30.0
+	golang.org/x/net v0.32.0
 )
 
 require (
@@ -15,6 +17,7 @@ require (
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.26.0 // indirect
 	github.com/prometheus/procfs v0.6.0 // indirect
-	golang.org/x/sys v0.0.0-20210603081109-ebe580a85c40 // indirect
+	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/text v0.21.0 // indirect
 	google.golang.org/protobuf v1.26.0-rc.1 // indirect
 )
