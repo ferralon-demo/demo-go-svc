@@ -92,8 +92,9 @@ The HTTP service still exposes the code-level SSRF and DoS canary surfaces:
 - **DoS** — `GET /expand?count=9223372036854775807` trips the recoverable `makeslice` panic;
   the deferred recover beacons `kind=fault&data=<seed>` (CWE-400).
 
-Both are removed on the `patched` ref (mode 2, code-fix), so the same triggers 404 and
-nothing is beaconed → `not_exploitable`.
+Both sinks are removed on the `patched` ref (mode 2, code-fix): the `/preview` and `/expand`
+routes are unregistered, so those requests fall through to the catch-all index (`/`) and never
+reach `http.Get` / `make([]byte, n)` — nothing is beaconed → `not_exploitable`.
 
 ## Local verification performed
 
