@@ -80,10 +80,8 @@ jobs:
         # Pinned, checksummed scanner delivery. `@<sha>` SHA-pins the Action; the Action's
         # own scanner-version + scanner-sha256 defaults pin the exact scanner bytes it fetches
         # (transitive pin), and its drift guard fails the run loud on any checksum mismatch.
-        # PENDING PIN: the SHA below is a placeholder — it goes live once the Operator publishes
-        # ferralon-ai/ferralon-assay + cuts the scanner release (deploy/assay/publish.sh --execute)
-        # and fills scanner-version/scanner-sha256 in the Action. See the TEG-015 Operator handoff.
-        uses: ferralon-ai/ferralon-assay@c58196ddbd4ff56c2ec163a5b388e7ffe514cea6
+        # SHA is ferralon-ai/ferralon-assay tag v0.1.0 (scanner v0.1.0).
+        uses: ferralon-ai/ferralon-assay@54d13999ac3df08508df2f5a6cc6df03d3498d1d
         with:
           mode: baseline
           target: .
