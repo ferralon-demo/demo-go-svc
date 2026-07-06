@@ -83,7 +83,7 @@ jobs:
         # PENDING PIN: the SHA below is a placeholder — it goes live once the Operator publishes
         # ferralon-ai/ferralon-assay + cuts the scanner release (deploy/assay/publish.sh --execute)
         # and fills scanner-version/scanner-sha256 in the Action. See the TEG-015 Operator handoff.
-        uses: ferralon-ai/ferralon-assay@0000000000000000000000000000000000000000
+        uses: ferralon-ai/ferralon-assay@c58196ddbd4ff56c2ec163a5b388e7ffe514cea6
         with:
           mode: baseline
           target: .
