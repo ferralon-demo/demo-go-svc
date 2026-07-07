@@ -41,16 +41,22 @@ is closed to anything outside that allowlist by construction).
   override it). The backend binds the OIDC token to an active install (403 otherwise) —
   install state, not any workflow variable, is what guards ingest.
 
-## How the scanner is distributed (and the planned cleanup)
+## How the scanner is distributed
 
-For this demo the scanner binaries are **vendored under [`bin/`](bin/)** and executed
-directly — the simplest honest path to a working in-runner scan. This is a known
-shortcut with two flagged follow-ons (tracked by the Operator, not solved here):
+The scanner is delivered by the **pinned, checksummed `ferralon-ai/ferralon-assay`
+GitHub Action**, SHA-pinned in
+[`.github/workflows/ferralon-assay.yml`](.github/workflows/ferralon-assay.yml). The Action
+fetches a **versioned scanner release at run time and checksum-verifies it** before running —
+**no scanner binary is committed to this repository**. The pin is explicit and the Action's
+drift guard fails the run **loud** on any checksum mismatch, so a stale or tampered scanner can
+never silently under-report. (Earlier this demo **vendored** the ~23 MB binaries under `bin/`
+and executed them directly — the simplest honest bootstrap; that shortcut is now retired in
+favor of the pinned release fetch.)
 
-1. **Proper distribution** — fetch a pinned, checksummed release of the scanner at run
-   time instead of committing ~23 MB of binary into the repository.
-2. **Brand-hardened build** — the vendored build is not scrubbed of internal
-   engine/import symbols at rest; a hardened (garble) or Ferralon-brand build should ship
-   so the compiled artifact carries no internal codename either. (The *authored*
-   surfaces — this workflow, the pivot Issue, this README — are already codename-clean,
-   checked in CI by `.ferralon/check_branding.sh`.)
+One flagged follow-on remains (tracked by the Operator, not solved here):
+
+1. **Brand-hardened build** — the released build is not scrubbed of internal engine/import
+   symbols at rest; a hardened (garble) or Ferralon-brand build should ship so the compiled
+   artifact carries no internal codename either. (The *authored* surfaces — this workflow, the
+   pivot Issue, this README — are already codename-clean, checked in CI by
+   `.ferralon/check_branding.sh`.)

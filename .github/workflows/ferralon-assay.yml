@@ -7,8 +7,8 @@
 # this name in sync with FERRALON_SCAN.md.
 #
 # What it does, in the runner (no source leaves the repo):
-#   1. runs the prebuilt Ferralon scanner over this Go module -> a schema-valid
-#      tegron.report.v1 report.json (the neutral scan spine);
+#   1. runs the Ferralon scanner over this Go module -> a schema-valid tegron.report.v1
+#      report.json (the neutral scan spine);
 #   2. on the default branch, persists the StateStore to refs/tegron/state (the ref the
 #      backend's in-repo reader keys off — pinned by cross-team contract, ADR-0015);
 #   3. on the default branch, pushes the FULL report.json to the backend's run-snapshot
@@ -22,8 +22,10 @@
 #
 # The scanner's OWN Tier-1 surfaces (its generic pinned Issue / sticky PR comment / SARIF
 # upload) are turned OFF — Ferralon owns the customer-facing surfaces (the pivot Issue
-# above). The binary is vendored under bin/ (the simplest honest path for the demo;
-# proper distribution is a flagged follow-on — see FERRALON_SCAN.md).
+# above). The scanner is DELIVERED by the pinned, checksummed `ferralon-ai/ferralon-assay`
+# Action (SHA-pinned below) which fetches a versioned scanner release at run time and
+# checksum-verifies it — no scanner binary is committed to this repo. (Previously the
+# binaries were vendored under bin/; that shortcut is retired — see FERRALON_SCAN.md.)
 
 name: Ferralon Assay
 
@@ -59,7 +61,7 @@ jobs:
     permissions:
       contents: write      # persist the StateStore ref (refs/tegron/state) on the default branch
       issues: write        # file/update the Ferralon pivot Issue
-      id-token: write      # request the GitHub Actions OIDC token for the ingest POST
+      id-token: write       # request the GitHub Actions OIDC token for the ingest POST
     steps:
       - uses: actions/checkout@v4
 
@@ -69,37 +71,34 @@ jobs:
           cache: false
 
       - name: Warm the module cache for this module
+        # The scanner's Go analyzer loads the module with go/packages, which needs the
+        # module graph resolvable on the runner — warm the cache before the scan.
         run: go build ./...
 
       - name: Run the Ferralon Assay
         id: scan
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          # Turn OFF the scanner's own customer-facing surfaces — Ferralon files its own
-          # pivot Issue below. (Env prefix is the vendored build's identity; '0' = off.)
-          NUCLEON_ISSUE: "0"
-          NUCLEON_PR_COMMENT: "0"
-          NUCLEON_CODE_SCANNING: "0"
-        run: |
-          chmod +x bin/ferralon-scan bin/ferralon-scan-plugin
-          mkdir -p "$RUNNER_TEMP/out"
+        # Pinned, checksummed scanner delivery. `@<sha>` SHA-pins the Action; the Action's
+        # own scanner-version + scanner-sha256 defaults pin the exact scanner bytes it fetches
+        # (transitive pin), and its drift guard fails the run loud on any checksum mismatch.
+        # SHA is ferralon-ai/ferralon-assay tag v0.1.0 (scanner v0.1.0).
+        uses: ferralon-ai/ferralon-assay@48a671cc34f64fd50a2ccc136ee8e0d22c7c64af
+        with:
+          mode: baseline
+          target: .
+          out: ${{ runner.temp }}/out
+          subject-repo: ${{ github.repository }}
+          revision: ${{ github.ref_name }}
+          commit: ${{ github.sha }}
           # Persist the durable StateStore ref only on the default branch (the baseline
-          # posture). A PR run — github.ref_name is "<n>/merge" — stays stateless so it
-          # never overwrites the baseline; -repo writes refs/tegron/state.
-          REPO_FLAG=""
-          if [ "${{ github.ref_name == github.event.repository.default_branch }}" = "true" ]; then
-            REPO_FLAG="-repo ${{ github.repository }}"
-          fi
-          ./bin/ferralon-scan baseline \
-            -target . \
-            -out "$RUNNER_TEMP/out" \
-            -plugin-go "$GITHUB_WORKSPACE/bin/ferralon-scan-plugin" \
-            -subject-repo "${{ github.repository }}" \
-            -revision "${{ github.ref_name }}" \
-            -commit "${{ github.sha }}" \
-            -ref "refs/tegron/state" \
-            $REPO_FLAG
-          echo "out=$RUNNER_TEMP/out" >> "$GITHUB_OUTPUT"
+          # posture). A PR run — github.ref_name is "<n>/merge" — stays stateless (no state-repo),
+          # so it never overwrites the baseline. state-ref is the backend's cross-team contract ref.
+          state-ref: refs/tegron/state
+          state-repo: ${{ github.ref_name == github.event.repository.default_branch && github.repository || '' }}
+          # Turn OFF the scanner's own customer-facing surfaces — Ferralon files its own pivot
+          # Issue below. (The Action maps these onto the fetched build's toggle prefix.)
+          issue: "false"
+          pr-comment: "false"
+          code-scanning: "false"
 
       - name: Branding wall — codename absent from authored surfaces
         run: ./.ferralon/check_branding.sh
@@ -109,8 +108,8 @@ jobs:
         with:
           name: ferralon-scan-report
           path: |
-            ${{ steps.scan.outputs.out }}/report.json
-            ${{ steps.scan.outputs.out }}/openvex.json
+            ${{ steps.scan.outputs.out-dir }}/report.json
+            ${{ steps.scan.outputs.out-dir }}/openvex.json
           if-no-files-found: error
 
       - name: Push the full run snapshot to the Ferralon /runs endpoint
@@ -128,14 +127,14 @@ jobs:
         env:
           FERRALON_RUNS_URL: ${{ vars.FERRALON_RUNS_URL || 'https://api.ferralon.com/runs' }}
           FERRALON_RUNS_AUD: ${{ vars.FERRALON_RUNS_AUD || 'ferralon-ingest' }}
-          REPORT: ${{ steps.scan.outputs.out }}/report.json
+          REPORT: ${{ steps.scan.outputs.out-dir }}/report.json
         run: ./.ferralon/post_runs.sh
 
       - name: File the Ferralon pivot Issue
         if: github.ref_name == github.event.repository.default_branch
         env:
           GH_TOKEN: ${{ github.token }}
-          REPORT: ${{ steps.scan.outputs.out }}/report.json
+          REPORT: ${{ steps.scan.outputs.out-dir }}/report.json
           # The backend-minted handle + authoritative run_id from the run-snapshot push —
           # the Issue composes its two run-addressable console links from these.
           FERRALON_RUN_HANDLE: ${{ steps.runs_push.outputs.handle }}
@@ -155,5 +154,5 @@ jobs:
         env:
           FERRALON_INGEST_URL: ${{ vars.FERRALON_INGEST_URL || 'https://api.ferralon.com/ingest' }}
           FERRALON_INGEST_AUD: ${{ vars.FERRALON_INGEST_AUD || 'ferralon-ingest' }}
-          REPORT: ${{ steps.scan.outputs.out }}/report.json
+          REPORT: ${{ steps.scan.outputs.out-dir }}/report.json
         run: ./.ferralon/post_ingest.sh
