@@ -98,7 +98,7 @@ authenticate with the user key, and land an admin session.
   pinned `v0.32.0` — INSIDE the advisory's affected range (`< v0.55.0`) — so it is a reachable
   candidate, not disqualified by version.
 
-## Alternate fires — TEGRON-SSRF-0001 / TEGRON-DOS-0001 (also fire)
+## Alternate fires — FERRALON-APP-SSRF-0001 / FERRALON-APP-DOS-0001 (also fire)
 
 The HTTP service still exposes the code-level SSRF and DoS canary surfaces:
 
