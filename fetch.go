@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -36,6 +38,30 @@ func resolveTarget(name string) (string, bool) {
 	return name, true
 }
 
+// validateResolvedURL rejects non-http(s) schemes and URLs that resolve to
+// private/loopback addresses, blocking SSRF to internal hosts.
+func validateResolvedURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return err
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return errors.New("scheme not allowed")
+	}
+	host := u.Hostname()
+	ips, err := net.LookupHost(host)
+	if err != nil {
+		return err
+	}
+	for _, ipStr := range ips {
+		ip := net.ParseIP(ipStr)
+		if ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() {
+			return errors.New("target resolves to a private address")
+		}
+	}
+	return nil
+}
+
 // fetchHandler implements the URL-preview endpoint. It forwards a caller-supplied target
 // directly to an outbound HTTP request with no allowlist, so a request can drive the server
 // to reach an internal or unintended host. The attacker-controlled `target` query parameter
@@ -52,6 +78,11 @@ func fetchHandler(w http.ResponseWriter, r *http.Request) {
 	resolved, ok := resolveTarget(target)
 	if !ok {
 		http.Error(w, "cannot resolve target", http.StatusBadRequest)
+		return
+	}
+
+	if err := validateResolvedURL(resolved); err != nil {
+		http.Error(w, "target not allowed: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
