@@ -22,7 +22,7 @@
 //
 //	GET /                   usage banner
 //	GET /healthz            liveness probe
-//	GET /preview?target=…   fetch a remote URL and report its status (the SSRF surface)
+//	GET /fetch?target=…     fetch a remote URL and report its status (the SSRF surface)
 //	GET /expand?count=…     allocate a working buffer of the requested size (the DoS surface)
 //	GET /normalize?host=…   IDNA-normalise a host to ASCII/Punycode (the x/net/idna use)
 //
@@ -77,7 +77,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", indexHandler)
 	mux.HandleFunc("/healthz", healthzHandler)
-	mux.HandleFunc("/preview", fetchHandler)
+	mux.HandleFunc("/fetch", fetchHandler)
 	mux.HandleFunc("/expand", expandHandler)
 	mux.HandleFunc("/normalize", normalizeHandler)
 
