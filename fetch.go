@@ -38,8 +38,21 @@ func resolveTarget(name string) (string, bool) {
 	return name, true
 }
 
-// validateResolvedURL rejects non-http(s) schemes and URLs that resolve to
-// private/loopback addresses, blocking SSRF to internal hosts.
+// allowedFetchHosts is the explicit allowlist of destination hosts the preview endpoint is
+// permitted to fetch. Anything not on this list — an attacker-supplied URL, the "internal"
+// exfil pseudo-target, a private/reserved address — is refused before any outbound request is
+// made. An allowlist (rather than a denylist of internal ranges) is the SSRF (CWE-918) fix
+// because it fails closed: a range the denylist forgot cannot slip through.
+var allowedFetchHosts = map[string]bool{
+	"example.com":     true,
+	"www.example.com": true,
+}
+
+// validateResolvedURL is the SSRF guard. It requires an http(s) scheme and — the primary
+// control — an allowlisted destination host, then re-checks the resolved addresses as defense
+// in depth so an allowlisted name cannot be rebased onto a loopback/private/link-local/
+// unspecified address. Every attacker-influenced or internal target is refused here, so the
+// outbound http.Get only ever reaches a vetted host.
 func validateResolvedURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -49,23 +62,26 @@ func validateResolvedURL(raw string) error {
 		return errors.New("scheme not allowed")
 	}
 	host := u.Hostname()
+	if !allowedFetchHosts[host] {
+		return errors.New("target host not on the fetch allowlist")
+	}
 	ips, err := net.LookupHost(host)
 	if err != nil {
 		return err
 	}
 	for _, ipStr := range ips {
 		ip := net.ParseIP(ipStr)
-		if ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() {
-			return errors.New("target resolves to a private address")
+		if ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
+			return errors.New("target resolves to a non-public address")
 		}
 	}
 	return nil
 }
 
-// fetchHandler implements the URL-preview endpoint. It forwards a caller-supplied target
-// directly to an outbound HTTP request with no allowlist, so a request can drive the server
-// to reach an internal or unintended host. The attacker-controlled `target` query parameter
-// flows through resolveTarget into http.Get — the server-side request forgery sink (CWE-918).
+// fetchHandler implements the URL-preview endpoint. The caller-supplied target flows through
+// resolveTarget, then validateResolvedURL enforces the destination allowlist BEFORE the
+// outbound http.Get, so the server cannot be driven to reach an internal or unintended host.
+// This is the patched (SSRF-closed) form of the CWE-918 surface.
 func fetchHandler(w http.ResponseWriter, r *http.Request) {
 	requestsTotal.Inc()
 
@@ -86,7 +102,8 @@ func fetchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// SSRF sink: an unguarded outbound request to an attacker-influenced URL.
+	// Formerly the unguarded SSRF sink; validateResolvedURL above now gates it to allowlisted,
+	// public destinations, so an attacker-influenced target never reaches this request.
 	resp, err := http.Get(resolved)
 	if err != nil {
 		http.Error(w, "fetch failed", http.StatusBadGateway)
