@@ -5,12 +5,14 @@
 //   - a reachable authorization-bypass candidate — golang.org/x/crypto/ssh's
 //     PublicKeyCallback wired the vulnerable "last-key-wins" way (CVE-2024-45337), reachable
 //     from the service's SSH-accepting entry point (the hero; see ssh.go);
-//   - a present-but-guarded authentication bypass — github.com/nanobox-io/golang-nanoauth
-//     (CVE-2020-36569), whose global-bypass path is foreclosed behind a token guard
-//     (not_exploitable; see auth.go);
-//   - a version-disqualified input-validation advisory — golang.org/x/net/idna
-//     (CVE-2026-39821), imported and reachable but pinned past the fixed range
-//     (disqualified; see normalize.go);
+//   - a reachable authentication-bypass candidate — github.com/nanobox-io/golang-nanoauth
+//     (CVE-2020-36569), whose vulnerable listener symbol is reached from main; a runtime
+//     ADMIN_TOKEN guard mitigates the empty-token bypass at run time, but a static
+//     reachability scan does not credit that guard, so the free scan reports it as a
+//     reachable_candidate — a candidate for review, not a claim of exploitability (see auth.go);
+//   - a reachable input-validation candidate — golang.org/x/net/idna (CVE-2026-39821),
+//     imported and reached from the /normalize endpoint at a version inside the advisory's
+//     affected range (reachable_candidate; see normalize.go);
 //
 // plus the attacker-tainted SSRF and DoS ingress→sink candidates the HTTP service exposes.
 // It is real code: `go build ./...` succeeds, and the binary serves HTTP on :8080 and SSH on
@@ -66,8 +68,10 @@ func main() {
 	// drives this listener; a static scan reaches the vulnerable PublicKeyCallback from here.
 	go serveSSH("127.0.0.1:2022")
 
-	// Start the nanoauth-protected admin surface — guarded off unless a non-empty ADMIN_TOKEN
-	// is configured, so the CVE-2020-36569 empty-token global bypass is never reachable.
+	// Start the nanoauth admin surface. A runtime ADMIN_TOKEN guard keeps the CVE-2020-36569
+	// empty-token global bypass from ever executing (see auth.go); a static reachability scan
+	// does not credit that runtime guard, so it still reaches the nanoauth listener symbol from
+	// here and reports CVE-2020-36569 as a reachable_candidate.
 	startAdminAuth()
 
 	mux := http.NewServeMux()
