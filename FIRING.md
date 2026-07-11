@@ -85,14 +85,18 @@ authenticate with the user key, and land an admin session.
 
 ## The other advisories (static verdicts — not fired)
 
-- **CVE-2020-36569 (`github.com/nanobox-io/golang-nanoauth`) → `not_exploitable`.** nanoauth
-  at this version globally disables token validation when started with an empty token. The
-  dependency and version match, but `startAdminAuth` (see `auth.go`) refuses to start any
-  nanoauth listener without a non-empty `ADMIN_TOKEN`, so the empty-token global-bypass path
-  is unreachable. Grounded-safe, not disqualified.
-- **CVE-2026-39821 (`golang.org/x/net/idna`) → `disqualified`.** `idna` is genuinely imported
-  and reachable from `/normalize`, but `golang.org/x/net` is pinned `v0.32.0` — past the
-  advisory's fixed range — so it is out of scope by version.
+- **CVE-2020-36569 (`github.com/nanobox-io/golang-nanoauth`) → `reachable_candidate`.**
+  nanoauth at this version globally disables token validation when started with an empty
+  token. The dependency and version match, and the vulnerable listener symbol is statically
+  reachable from `main` (control-flow-only grade). `startAdminAuth` (see `auth.go`) does add a
+  runtime guard — it refuses to start any nanoauth listener without a non-empty `ADMIN_TOKEN`,
+  which mitigates the empty-token bypass at run time — but a static reachability scan does not
+  credit that runtime value-check, so the free scan honestly reports a reachable_candidate (a
+  candidate for review, never a claim of exploitability).
+- **CVE-2026-39821 (`golang.org/x/net/idna`) → `reachable_candidate`.** `idna` is genuinely
+  imported and reached from `/normalize` (attacker-tainted grade), and `golang.org/x/net` is
+  pinned `v0.32.0` — INSIDE the advisory's affected range (`< v0.55.0`) — so it is a reachable
+  candidate, not disqualified by version.
 
 ## Alternate fires — TEGRON-SSRF-0001 / TEGRON-DOS-0001 (also fire)
 

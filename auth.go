@@ -16,12 +16,14 @@ import (
 // `check` flag to false, which disables token validation for every nanoauth listener in the
 // process — a global authentication bypass, not just for the empty-token server.
 //
-// This service is present at the vulnerable version, but the bypass path is provably guarded:
-// the admin listener is started ONLY when a non-empty ADMIN_TOKEN is configured. The
-// empty-token branch that trips the global `check=false` bypass is never executed here, so a
-// tainted request can never reach an unauthenticated nanoauth server — this code refuses to
-// configure one. Grounded-safe (not_exploitable), not disqualified: the dependency and
-// version match the advisory, the sink is simply unreachable behind the token guard.
+// This service is present at the vulnerable version, and the vulnerable nanoauth listener
+// symbol is statically reachable from main (see main.go), so the free scan reports
+// CVE-2020-36569 as a reachable_candidate — a candidate for review, never a claim of
+// exploitability. A runtime guard does mitigate the empty-token global bypass: the admin
+// listener is started ONLY when a non-empty ADMIN_TOKEN is configured, so the empty-token
+// branch that trips the global `check=false` bypass is never executed here. But a static
+// reachability scan does not credit that runtime value-check, so the advisory stays a
+// reachable_candidate rather than being cleared — the honest free-scan outcome.
 func startAdminAuth() {
 	token := os.Getenv("ADMIN_TOKEN")
 
