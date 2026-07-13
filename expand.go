@@ -55,11 +55,6 @@ func expandHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if n < 0 || n > 1<<20 {
-		http.Error(w, "count out of range", http.StatusBadRequest)
-		return
-	}
-
 	// DoS sink: an attacker-sized allocation with no upper bound.
 	buf := make([]byte, n)
 	fmt.Fprintf(w, "allocated %d bytes\n", len(buf))
