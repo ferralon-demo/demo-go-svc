@@ -1,0 +1,41 @@
+# Honesty contract — keep demo-go-svc@vulnerable honestly vulnerable (TEG-049).
+#
+# `vulnerable` is the GOLDEN reference for the repeatable Tegron demo: it must stay genuinely,
+# honestly vulnerable so a live fire produces a real proven apex. This workflow FAILS if the
+# baseline has silently patched itself — specifically if /expand grows an upper bound on `count`
+# (the exact drift that cost us on 2026-07-13, when an auto-prove DoS fix was merged into
+# vulnerable via PR #9), or if the SSRF /preview sink grows an allowlist. The check is black-box
+# and behavioural (it builds and drives the real service); the logic lives in .demo/honesty-check.sh.
+#
+# SCOPE — vulnerable ONLY, by construction:
+#   * push to `vulnerable`         → catches a drift landing directly on the golden branch.
+#   * pull_request BASE `vulnerable` → catches a PR that would bound it BEFORE merge (PR #9 was
+#                                      exactly this: a fix-PR opened against vulnerable).
+# It deliberately does NOT run on `main` or on PRs targeting `main`: `main` is the disposable
+# fire target and is SUPPOSED to be patched by the auto-prove fix-PR. (The .demo/ tooling travels
+# onto main when prep-demo.sh resets it, but these branch filters keep the check inert there.)
+name: Honesty contract
+
+on:
+  push:
+    branches: [vulnerable]
+  pull_request:
+    branches: [vulnerable]
+
+permissions:
+  contents: read
+
+jobs:
+  honesty:
+    name: vulnerable stays honestly vulnerable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.3"
+          cache: false
+
+      - name: Assert the vulnerable sinks are reachable and unguarded
+        run: ./.demo/honesty-check.sh
