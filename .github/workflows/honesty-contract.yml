@@ -1,6 +1,6 @@
-# Honesty contract — keep demo-go-svc@vulnerable honestly vulnerable (TEG-049).
+# Honesty contract — keep demo-go-svc@vulnerable honestly vulnerable.
 #
-# `vulnerable` is the GOLDEN reference for the repeatable Tegron demo: it must stay genuinely,
+# `vulnerable` is the GOLDEN reference for the repeatable Ferralon demo: it must stay genuinely,
 # honestly vulnerable so a live fire produces a real proven apex. This workflow FAILS if the
 # baseline has silently patched itself — specifically if /expand grows an upper bound on `count`
 # (the exact drift that cost us on 2026-07-13, when an auto-prove DoS fix was merged into
