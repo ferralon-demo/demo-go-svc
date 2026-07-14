@@ -82,7 +82,7 @@ jobs:
         # (transitive pin), and its drift guard fails the run loud on any checksum mismatch.
         # Pinned by commit SHA. The Action's own scanner-version + scanner-sha256
         # defaults pin the exact scanner bytes; no version is named here on purpose.
-        uses: ferralon-ai/ferralon-assay@40b3cd8fe7d33ff10c0cd285272e97752bb9f99b
+        uses: ferralon-ai/ferralon-assay@67ce1b77c0ade791167a13ee83d74df11e4d4e1d
         with:
           mode: baseline
           target: .
@@ -100,6 +100,7 @@ jobs:
           issue: "false"
           pr-comment: "false"
           code-scanning: "false"
+          include-house-canaries: "true"
 
       - name: Branding wall — codename absent from authored surfaces
         run: ./.ferralon/check_branding.sh
