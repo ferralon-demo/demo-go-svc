@@ -102,12 +102,12 @@ authenticate with the user key, and land an admin session.
 
 The HTTP service still exposes the code-level SSRF and DoS canary surfaces:
 
-- **SSRF** — `GET /preview?target=internal` drives `fetchHandler` → `resolveTarget` → the
+- **SSRF** — `GET /fetch?target=internal` drives `fetchHandler` → `resolveTarget` → the
   server's own `http.Get` (CWE-918), which beacons `kind=canary&data=<seed>`.
 - **DoS** — `GET /expand?count=9223372036854775807` trips the recoverable `makeslice` panic;
   the deferred recover beacons `kind=fault&data=<seed>` (CWE-400).
 
-Both sinks are removed on the `patched` ref (mode 2, code-fix): the `/preview` and `/expand`
+Both sinks are removed on the `patched` ref (mode 2, code-fix): the `/fetch` and `/expand`
 routes are unregistered, so those requests fall through to the catch-all index (`/`) and never
 reach `http.Get` / `make([]byte, n)` — nothing is beaconed → `not_exploitable`.
 
