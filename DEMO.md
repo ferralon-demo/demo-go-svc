@@ -17,7 +17,7 @@ land, and reset for the next time — without the baseline ever silently patchin
 
 | Branch | Role | Rules |
 |---|---|---|
-| **`vulnerable`** | The **golden reference**. Hand-curated, honestly-vulnerable code for every demoed candidate (DoS unbounded sink, SSRF fetch route, the SSH `CVE-2024-45337` hero) plus the canary / [`FIRING.md`](FIRING.md) contract. | **Never fired against. Never accepts a merge. `*-autoprove-fix-*` merges blocked.** Branch-protected. It cannot self-patch because nothing is ever merged into it. |
+| **`vulnerable`** | The **golden reference**. Hand-curated, honestly-vulnerable code for every demoed candidate (DoS unbounded sink, SSRF fetch route, the SSH `CVE-2024-45337` hero) plus the canary / [`FIRING.md`](FIRING.md) contract. | **Never fired against. Never accepts a fix-merge.** Auto-prove-headed PRs into it are **auto-closed by CI** ([source guard](.github/workflows/source-guard.yml)) — reactively, **not** branch-protected: protection and rulesets both 403 on this plan (see the Operator handoff below). It should not self-patch, because the fire targets `main` and no fix-branch is ever produced against it. |
 | **`main`** (default) | The **disposable demo target**. Reset from `vulnerable` before each demo, fired against, then patched by the fix-PR. | Reset (force-push) from `vulnerable` before every demo. Fire here. Patched here. Wiped on the next reset. |
 | **`patched`** | The **pre-baked safe state** — all candidates closed. | For the "here's a clean system" shortcut when there's no time for the ~10-min live pipeline. Presented as the *end-state*, not a live run. |
 | **`*-autoprove-fix-*`** | **Transient pipeline output** — one branch per proven fire, produced by the auto-prove arc. | Never merged to `vulnerable`. GC periodically (see below). |
@@ -71,7 +71,7 @@ golden baseline. The demo is repeatable indefinitely.
 
 When there isn't ~10 minutes for the live pipeline, skip straight to the end-state: point the
 audience at the **`patched`** branch, which has every candidate already closed (dependency bump +
-correct callback usage for the SSH hero; the `/preview` and `/expand` routes unregistered for the
+correct callback usage for the SSH hero; the SSRF and `/expand` routes unregistered for the
 SSRF/DoS canaries). Present it as *the end-state a fix-PR produces*, not as a live run — it is a
 pre-baked safe system, not a fresh proof.
 
@@ -103,7 +103,7 @@ and asserts, black-box, that the vulnerable sinks are still reachable and unguar
 - **DoS** — `/expand?count=<MaxInt64>` must return **500** (the unbounded `make([]byte, n)` sink
   faulted). If it returns **400**, `/expand` has grown a bound — the drift PR #9 introduced — and
   the check fails loudly.
-- **SSRF** — `/preview?target=<arbitrary>` must return **502** (the unguarded outbound fetch was
+- **SSRF** — `/fetch?target=<arbitrary>` must return **502** (the unguarded outbound fetch was
   actually made). If it returns **400**, an allowlist was added and the check fails.
 
 It is scoped to `vulnerable` only — it never runs on `main` (which is *supposed* to be patched).
@@ -113,17 +113,78 @@ so it never pollutes the scanned app surface.
 
 ---
 
+## The source guard (CI)
+
+`.github/workflows/source-guard.yml` is the **name-based** half of the drift protection (the
+honesty contract above is the behavioural half). On a pull request into `vulnerable` whose head
+branch name contains `autoprove`, it **closes the pull request** with a comment explaining why
+and pointing the fix at `main`, then fails the job so the red X is on the record too.
+
+It **closes** rather than merely failing because native branch protection is unavailable on this
+repository — a private repo on the free plan, where the branch-protection API returns **403**. A
+red check would be advisory only; a closed PR cannot be merged.
+
+**Why it lives on `vulnerable`.** For a `pull_request` event GitHub matches the `on:` branch
+filter against the **base** branch and runs the workflow as it exists in the PR's **merge
+commit** (base ∪ head). Putting the file on the base therefore guarantees it is present for
+*every* PR into `vulnerable`, whatever the head branch happens to contain. On `main` it would
+not be.
+
+**What it does not do — read this before relying on it.** It is **reactive, not a hard gate**:
+there is a window between the PR opening and the job closing it, and a maintainer can simply
+reopen. It does **not** cover direct pushes to `vulnerable` (that is the honesty contract's
+job), and being name-based it does not cover a hand-made branch carrying the same patch, or a
+future pipeline rename. The deepest guard remains the structural one at the top of this file:
+**fire against a freshly-reset `main`, never against `vulnerable`.** The full posture, with its
+limits, is recorded in [`docs/DECISIONS.md`](docs/DECISIONS.md) § A1.
+
+### Verifying the close path (run once, after the guard is on `vulnerable`)
+
+The PR that *introduces* the guard does **not** test it: that head is not an auto-prove branch,
+so only the pass path runs. To verify the close path for real, from a checkout with `vulnerable`
+up to date:
+
+```bash
+# 1. A throwaway head whose NAME triggers the guard; the content is irrelevant.
+git checkout -b test-autoprove-guard origin/vulnerable
+git commit --allow-empty -m "test: source guard close path (no content change)"
+git push -u origin test-autoprove-guard
+
+# 2. Open it against the golden branch — this is the thing the guard exists to stop.
+gh pr create --base vulnerable --head test-autoprove-guard \
+  --title "TEST: source guard close path" --body "Throwaway. Expect: auto-closed by the source guard."
+
+# 3. Within ~a minute, expect the PR to be CLOSED with the guard's comment, and the
+#    "no auto-prove fix into the golden branch" check to be red.
+gh pr view test-autoprove-guard --json state,comments --jq '{state, comments: [.comments[].body][0][0:120]}'
+
+# 4. Clean up.
+git push origin --delete test-autoprove-guard
+```
+
+A **control** run is worth doing alongside it: any PR into `vulnerable` from a normally-named
+branch should show the same check **green** and be left untouched.
+
+---
+
 ## Operator handoff — GitHub settings (not a Builder action)
 
 These are repo-settings changes only the Operator can make; they complete the model above and are
 what makes self-patching structurally impossible rather than merely convention:
 
-1. **Make `main` the default branch.** Keep `vulnerable` as a side branch. (`main` does not exist
-   yet — the first `prep-demo.sh --execute` creates it from `vulnerable`; then set it default.)
-   Note: [`.github/workflows/ferralon-assay.yml`](.github/workflows/ferralon-assay.yml) hardcodes
-   `push: branches: [vulnerable]`; if the default changes, review that filter in lockstep.
-2. **Branch-protect `vulnerable`:** no direct pushes, no merges, and **explicitly block merges
-   from `*-autoprove-fix-*`**. This is the guard that would have stopped PR #9.
+1. ~~**Make `main` the default branch.**~~ **DONE** — `main` exists and is the default branch.
+   Note: [`.github/workflows/ferralon-assay.yml`](.github/workflows/ferralon-assay.yml) still
+   hardcodes `push: branches: [vulnerable]`, deliberately — the golden branch is what the
+   baseline posture is measured against. Review that filter if the intent ever changes.
+2. ~~**Branch-protect `vulnerable`.**~~ **NOT POSSIBLE ON THIS PLAN — do not wait for it.**
+   Verified 2026-07-21: both `repos/.../branches/vulnerable/protection` and `repos/.../rulesets`
+   return **403 — "Upgrade to GitHub Pro or make this repository public to enable this
+   feature."** So neither classic branch protection nor rulesets is available while this repo is
+   private on the free plan. The reactive
+   [source guard](.github/workflows/source-guard.yml) is what stands in for it, and it is
+   **weaker** than a protected branch would be — see [`docs/DECISIONS.md`](docs/DECISIONS.md)
+   § A1 for the honest posture. If the repo goes public or the org upgrades, add the real
+   protected-branch rule with the source guard as a **required** check and supersede A1.
 
 ## Related follow-ups (tracked separately — not part of this runbook)
 
