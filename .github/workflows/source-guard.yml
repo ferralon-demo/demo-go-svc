@@ -1,0 +1,143 @@
+# Source guard — no auto-prove fix-branch may land on the GOLDEN `vulnerable` branch.
+#
+# WHY THIS EXISTS. `vulnerable` is the golden reference for the repeatable Ferralon demo: it
+# must stay genuinely, honestly vulnerable so a live fire produces a real proven apex. On
+# 2026-07-13 an auto-prove synthesized DoS fix (an upper bound on /expand's `count`) was
+# merged into `vulnerable` via PR #9. The baseline patched ITSELF, and every subsequent DoS
+# fire honestly returned reasoned_not_exploitable against a target that was no longer
+# vulnerable. The honesty wall was right; the fixture was wrong.
+#
+# This guard makes the specific mechanism of that incident — a fix-PR from an auto-prove
+# head branch, opened against `vulnerable` — fail closed. Fix-PRs belong on the DISPOSABLE
+# `main` (reset from `vulnerable` before each demo, fired against, patched, wiped), never on
+# the golden branch. See DEMO.md § The branch model.
+#
+# ─────────────────────────────────────────────────────────────────────────────────────────
+# THE CONDITION — why it matches `autoprove`, not `autoprove-fix`.
+#
+# The auto-prove pipeline has used TWO fix-branch naming conventions, both observed on this
+# repository's own PR history:
+#   * the PR #9 / PR #13 generation — `abp-129-dos-autoprove-fix-2d1301c571f2`
+#   * the CURRENT generation        — `ferralon/autoprove/ferralon-app-dos-0001` (PR #15)
+# The current name contains `autoprove` but NOT `autoprove-fix`, so a guard keyed on the
+# literal `autoprove-fix` would miss exactly the branches the pipeline produces today. The
+# condition therefore matches the substring `autoprove`, which is a strict SUPERSET of
+# `autoprove-fix` and covers both generations. No non-auto-prove head branch in this
+# repository's history contains it (checked against every PR head ever opened here: `teg-*`,
+# `aga-*`, `abp-*`, `ferralon-assay-autobump-*`, `ferralon-canary-optin`).
+#
+# ─────────────────────────────────────────────────────────────────────────────────────────
+# HOW IT ENFORCES — and the honest limits of that enforcement.
+#
+# It does NOT merely red-X the PR. Native branch protection is unavailable on this repository
+# (private repo on the free plan — the branch-protection API returns 403), so a failing status
+# check is ADVISORY ONLY: nothing stops a maintainer clicking Merge past a red check. So this
+# guard enforces by REACTION: it CLOSES the offending pull request (and comments why), then
+# fails the job so the red X is on the record too. A closed PR cannot be merged.
+#
+# What this genuinely enforces:
+#   * A PR into `vulnerable` whose head branch name contains `autoprove` gets closed, with an
+#     explanation comment naming the alternative (`main`).
+#
+# What it does NOT enforce — state plainly, do not oversell:
+#   * It is REACTIVE, not a hard gate. There is a window between "PR opened" and "job closes
+#     it" in which a fast merge would succeed; and a maintainer can simply REOPEN the PR and
+#     merge it. Nothing here is cryptographic and nothing here is a required-status gate.
+#   * DIRECT PUSHES to `vulnerable` are not covered at all — this is a `pull_request` guard.
+#     The behavioural honesty contract (.github/workflows/honesty-contract.yml, which DOES run
+#     on push to `vulnerable`) is what catches drift that arrives by push.
+#   * Drift arriving under any other branch name is not covered — the condition is NAME-BASED,
+#     and a name is not a property of the change. A hand-made branch carrying the same patch
+#     passes this job untouched, and a future pipeline rename would slip past it too (which is
+#     precisely how the `autoprove-fix` literal went stale — see THE CONDITION above). The
+#     behavioural honesty contract is the backstop that does not depend on a name.
+#
+# The DEEPEST guard is neither of these two CI jobs: it is the structural one — fire against a
+# freshly-reset `main`, never against `vulnerable`, so no fix-branch is ever produced against
+# the golden branch in the first place (DEMO.md, and the ABP-side `base_ref` default). CI here
+# is defence in depth behind that, not a replacement for it.
+#
+# ─────────────────────────────────────────────────────────────────────────────────────────
+# ACTIVATION SEMANTICS — when this begins firing.
+#
+# For a `pull_request` event GitHub evaluates the `on:` branch filter against the PR's BASE
+# branch, and runs the workflow file as it exists in the PR's MERGE commit (base ∪ head). So
+# placing this file on `vulnerable` — the base — guarantees it is present for EVERY PR into
+# `vulnerable`, whatever the head branch contains. That is why it lives here and not on `main`.
+#
+# Because the merge commit also contains the head's changes, this workflow is expected to run
+# on the pull request that INTRODUCES it as well — but that is an EXPECTATION about GitHub's
+# merge-commit resolution, not something this repository has observed, so treat the introducing
+# PR's check list as the evidence. Either way that run is not a meaningful test of the CLOSE
+# path: the introducing head is `teg-054-source-guard-on-vulnerable`, which does not contain
+# `autoprove`, so it exercises only the pass branch. The close path is verified by a deliberate
+# post-merge test PR — see DEMO.md § The source guard (CI) for that procedure.
+#
+# GITHUB_TOKEN has the `pull-requests: write` scope granted below because this is an internal,
+# non-fork pull request. A PR from a FORK gets a read-only token, so the close would fail; this
+# repository takes no fork PRs, and a failed close still leaves the job red.
+
+name: Source guard
+
+on:
+  pull_request:
+    # `edited` is included deliberately: it fires when a PR's BASE branch is changed, which is
+    # how an auto-prove fix-PR could be re-pointed at `vulnerable` after being opened elsewhere.
+    types: [opened, reopened, synchronize, edited]
+    branches: [vulnerable]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: no auto-prove fix into the golden branch
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write     # required to close the offending PR and comment on it
+    steps:
+      - name: Normal head — nothing to guard against
+        if: ${{ !contains(github.head_ref, 'autoprove') }}
+        run: |
+          echo "Source guard clean ✓ — head branch '${{ github.head_ref }}' is not an auto-prove"
+          echo "fix-branch. This PR is left untouched."
+
+      - name: Auto-prove fix-branch into the golden branch — close it
+        if: ${{ contains(github.head_ref, 'autoprove') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          echo "Source guard VIOLATION — head '$HEAD_REF' is an auto-prove fix-branch and its" >&2
+          echo "base is the golden 'vulnerable' branch. Closing the pull request." >&2
+
+          # The comment body is staged to a file first: a heredoc nested inside a "$( … )"
+          # command substitution is parsed differently across bash versions, and this step must
+          # not depend on the runner's bash being new enough.
+          cat > "$RUNNER_TEMP/source-guard-comment.md" <<'EOF'
+          ### Closed automatically by the Ferralon source guard
+
+          This pull request was opened from an **auto-prove fix-branch** against **`vulnerable`**,
+          and `vulnerable` is the **golden reference** for the repeatable Ferralon demo.
+
+          Merging an auto-prove fix here would silently patch the golden vulnerable sink — the
+          baseline would stop being honestly vulnerable, and every later fire against it would
+          truthfully report `not_exploitable` against a target that is no longer exploitable.
+          That is exactly what happened on 2026-07-13 (PR #9, the unbounded `/expand` sink), and
+          it is why this branch takes no fix-PRs at all.
+
+          **What to do instead:** land the fix on **`main`** — the disposable fire target. Reset
+          it from `vulnerable` with `.demo/prep-demo.sh --execute`, fire against it, and merge the
+          fix-PR there. `main` is wiped and re-created from the golden baseline before every demo,
+          so the fix is shown landing without contaminating the reference.
+
+          See `DEMO.md` § The branch model. If you believe this close is wrong, reopen and say why
+          in a comment — this guard is reactive and deliberately not a hard gate.
+          EOF
+
+          gh pr close "$PR_URL" --comment "$(cat "$RUNNER_TEMP/source-guard-comment.md")"
+
+          echo "Pull request closed. Failing the job so the violation is on the check record too." >&2
+          exit 1

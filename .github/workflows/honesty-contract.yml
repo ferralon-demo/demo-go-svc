@@ -4,8 +4,14 @@
 # honestly vulnerable so a live fire produces a real proven apex. This workflow FAILS if the
 # baseline has silently patched itself — specifically if /expand grows an upper bound on `count`
 # (the exact drift that cost us on 2026-07-13, when an auto-prove DoS fix was merged into
-# vulnerable via PR #9), or if the SSRF /preview sink grows an allowlist. The check is black-box
+# vulnerable via PR #9), or if the SSRF /fetch sink grows an allowlist. The check is black-box
 # and behavioural (it builds and drives the real service); the logic lives in .demo/honesty-check.sh.
+#
+# COMPANION GUARD (TEG-054): this workflow is the BEHAVIOURAL half of the drift protection —
+# it asks "is the fixture still what it claims to be?", whatever the change was called. The
+# NAME-BASED half is .github/workflows/source-guard.yml, which closes a PR into `vulnerable`
+# from an auto-prove fix-branch before it can merge. Neither is a hard gate; see that file's
+# header for the honest enforcement posture, and docs/DECISIONS.md for the recorded decision.
 #
 # SCOPE — vulnerable ONLY, by construction:
 #   * push to `vulnerable`         → catches a drift landing directly on the golden branch.

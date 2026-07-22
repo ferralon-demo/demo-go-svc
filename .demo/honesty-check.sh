@@ -70,19 +70,27 @@ else
   fail=1
 fi
 
-# ── FERRALON-APP-SSRF-0001 : /preview must have NO allowlist ────────────────────────────────
+# ── FERRALON-APP-SSRF-0001 : /fetch must have NO allowlist ──────────────────────────────────
 # resolveTarget forwards ANY caller target verbatim into http.Get — there is no allowlist. An
 # arbitrary, unroutable target therefore REACHES the sink and fails only at connect → HTTP 502
 # "fetch failed" (proving the outbound request was actually made). An allowlist drift would
 # reject the target up front with HTTP 400 "cannot resolve target" BEFORE any fetch. So: 502 ==
 # sink reachable & unguarded; 400 == the fixture has grown a guard (self-patched). A loopback
 # closed port is used so nothing leaves the runner.
-ssrf_code="$(code "$BASE/preview?target=http://127.0.0.1:1/")"
+#
+# ROUTE NAME (TEG-054): this drove `/preview` until 2026-07-21. TEG-039 renamed the SSRF route
+# to `/fetch` (PR #14, merged into vulnerable), but this check was not updated in lockstep — so
+# it kept driving a retired path, which `mux.HandleFunc("/", indexHandler)` swallows as a 200.
+# The contract has therefore been FAILING on every push/PR into `vulnerable` since PR #14, and
+# failing for a reason that has nothing to do with drift: the SSRF sink was unguarded the whole
+# time. A permanently-red honesty contract is worse than no contract — it cannot distinguish
+# real drift from its own staleness. If the route is ever renamed again, rename it HERE too.
+ssrf_code="$(code "$BASE/fetch?target=http://127.0.0.1:1/")"
 if [ "$ssrf_code" = "502" ]; then
-  echo "  SSRF  ✓  /preview?target=<arbitrary> -> 502  (reached unguarded outbound fetch; honestly vulnerable)"
+  echo "  SSRF  ✓  /fetch?target=<arbitrary> -> 502  (reached unguarded outbound fetch; honestly vulnerable)"
 else
-  echo "  SSRF  ✗  /preview?target=<arbitrary> -> $ssrf_code  (want 502)" >&2
-  echo "           /preview appears to GUARD the target (allowlist added?) — the SSRF sink is no" >&2
+  echo "  SSRF  ✗  /fetch?target=<arbitrary> -> $ssrf_code  (want 502)" >&2
+  echo "           /fetch appears to GUARD the target (allowlist added?) — the SSRF sink is no" >&2
   echo "           longer reachable. Restore the unguarded http.Get in fetchHandler/resolveTarget." >&2
   fail=1
 fi
