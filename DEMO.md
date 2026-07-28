@@ -8,8 +8,13 @@ land, and reset for the next time — without the baseline ever silently patchin
 > bound on `/expand`'s `count`) was merged back into the `vulnerable` branch (PR #9). The
 > baseline patched *itself*, and every subsequent DoS fire honestly returned
 > `reasoned_not_exploitable` against a target that was no longer vulnerable. The honesty wall
-> was right; the fixture was wrong. The branch model below makes that contamination
-> **structurally impossible**, not merely discouraged.
+> was right; the fixture was wrong. The branch model below is what keeps that from recurring.
+>
+> **Read the model as a convention plus two CI backstops, not as a hard guarantee.** "Fire
+> against `main`, never against `vulnerable`" is the *intended* deepest protection, but it is
+> not enforced by any code in this repository or in the pipeline that fires at it. What
+> actually holds today is described honestly under
+> [The protection posture](#the-protection-posture-what-is-actually-enforced) below.
 
 ---
 
@@ -17,14 +22,18 @@ land, and reset for the next time — without the baseline ever silently patchin
 
 | Branch | Role | Rules |
 |---|---|---|
-| **`vulnerable`** | The **golden reference**. Hand-curated, honestly-vulnerable code for every demoed candidate (DoS unbounded sink, SSRF fetch route, the SSH `CVE-2024-45337` hero) plus the canary / [`FIRING.md`](FIRING.md) contract. | **Never fired against. Never accepts a fix-merge.** Auto-prove-headed PRs into it are **auto-closed by CI** ([source guard](.github/workflows/source-guard.yml)) — reactively, **not** branch-protected: protection and rulesets both 403 on this plan (see the Operator handoff below). It should not self-patch, because the fire targets `main` and no fix-branch is ever produced against it. |
+| **`vulnerable`** | The **golden reference**. Hand-curated, honestly-vulnerable code for every demoed candidate (DoS unbounded sink, SSRF fetch route, the SSH `CVE-2024-45337` hero) plus the canary / [`FIRING.md`](FIRING.md) contract. | **Never fired against. Never accepts a fix-merge.** Auto-prove-headed PRs into it are **auto-closed by CI** ([source guard](.github/workflows/source-guard.yml)) — reactively, **not** branch-protected: protection and rulesets both 403 on this plan (see the Operator handoff below). It should not self-patch, because the fire is *supposed* to target `main` — but nothing enforces that choice, so read [The protection posture](#the-protection-posture-what-is-actually-enforced) before relying on it. |
 | **`main`** (default) | The **disposable demo target**. Reset from `vulnerable` before each demo, fired against, then patched by the fix-PR. | Reset (force-push) from `vulnerable` before every demo. Fire here. Patched here. Wiped on the next reset. |
 | **`patched`** | The **pre-baked safe state** — all candidates closed. | For the "here's a clean system" shortcut when there's no time for the ~10-min live pipeline. Presented as the *end-state*, not a live run. |
 | **`*-autoprove-fix-*`** | **Transient pipeline output** — one branch per proven fire, produced by the auto-prove arc. | Never merged to `vulnerable`. GC periodically (see below). |
 
 **The load-bearing rule: fire against a freshly-reset `main`, never against `vulnerable`.** Then
 the fix-branch bases on `main`, the fix-PR targets `main`, and `vulnerable` is never fired
-against and never receives a fix-branch — so self-patching cannot recur by construction.
+against and never receives a fix-branch.
+
+That rule is the **intended** deepest protection — but it is a rule the pipeline is *asked* to
+follow, not one it is *made* to follow. See
+[The protection posture](#the-protection-posture-what-is-actually-enforced).
 
 ---
 
@@ -134,9 +143,38 @@ not be.
 there is a window between the PR opening and the job closing it, and a maintainer can simply
 reopen. It does **not** cover direct pushes to `vulnerable` (that is the honesty contract's
 job), and being name-based it does not cover a hand-made branch carrying the same patch, or a
-future pipeline rename. The deepest guard remains the structural one at the top of this file:
-**fire against a freshly-reset `main`, never against `vulnerable`.** The full posture, with its
-limits, is recorded in [`docs/DECISIONS.md`](docs/DECISIONS.md) § A1.
+future pipeline rename. It is **defence in depth**, not the foundation — and the structural rule
+at the top of this file (**fire against a freshly-reset `main`, never against `vulnerable`**),
+which earlier revisions of this runbook called the deepest guard, turns out not to be enforced
+anywhere either. What is actually load-bearing today is set out immediately below; the recorded
+decisions are in [`docs/DECISIONS.md`](docs/DECISIONS.md) § A1 and § A4.
+
+---
+
+## The protection posture — what is actually enforced
+
+Earlier revisions of this runbook, and of the source guard's own header, described the
+structural rule — *fire against a freshly-reset `main`, never against `vulnerable`* — as the
+**deepest** guard, the one that made contamination impossible by construction. **That was not
+true, and the correction is worth keeping visible rather than quietly editing away.** The rule
+was written down and followed in practice, but nothing in this repository, and nothing in the
+pipeline that fires at it, ever *checked* it: the fix-PR base is taken from whatever GitHub
+reports as this repo's default branch, with no validation that it is not the golden branch, and
+the unattended path fires at whatever ref a recorded scan run names.
+
+So, honestly, what keeps `vulnerable` safe today is:
+
+| # | What holds | How strong it is |
+|---|---|---|
+| 1 | **The repo's `default_branch` is `main`.** The fix-PR base is read from it, and the scan's run-recording steps only fire when the branch being scanned *is* the default branch. | **External, mutable GitHub configuration** — not code, not in this repo, and changeable in the settings UI without any review. This is the single load-bearing item. |
+| 2 | **The scan no longer runs on a push to `vulnerable`.** [`ferralon-assay.yml`](.github/workflows/ferralon-assay.yml)'s push filter names `main`, so pushing the golden branch produces no scan run at all — nothing that could later be picked up as a fire target. | Real and in-repo, but scoped to the **push** path. The daily schedule always runs against whatever branch is currently the default, so item 1 still backstops it. |
+| 3 | **The source guard** closes an auto-prove-headed PR into `vulnerable`. | Reactive, name-based, not a required check — limits above. |
+| 4 | **The honesty contract** fails if the golden sinks stop being vulnerable. | A **detector, not a blocker** — it goes red after the fact. |
+
+Layers 3 and 4 are genuine defence in depth and should stay. But note what the table says: the
+deepest thing protecting the golden branch is a **GitHub repository setting**, and the durable
+fix — making the pipeline refuse to target a golden ref rather than trusting it not to — is
+tracked in the backend, not here.
 
 ### Verifying the close path (run once, after the guard is on `vulnerable`)
 
@@ -169,13 +207,20 @@ branch should show the same check **green** and be left untouched.
 
 ## Operator handoff — GitHub settings (not a Builder action)
 
-These are repo-settings changes only the Operator can make; they complete the model above and are
-what makes self-patching structurally impossible rather than merely convention:
+These are repo-settings changes only the Operator can make. They are load-bearing — item 1 in
+particular is the single strongest thing protecting the golden branch today (see
+[The protection posture](#the-protection-posture-what-is-actually-enforced)):
 
 1. ~~**Make `main` the default branch.**~~ **DONE** — `main` exists and is the default branch.
-   Note: [`.github/workflows/ferralon-assay.yml`](.github/workflows/ferralon-assay.yml) still
-   hardcodes `push: branches: [vulnerable]`, deliberately — the golden branch is what the
-   baseline posture is measured against. Review that filter if the intent ever changes.
+   **Do not change it back.** The fix-PR base is read from this setting, and the scan's
+   run-recording steps fire only on the default branch, so pointing it at `vulnerable` would
+   re-open both paths at once.
+   [`.github/workflows/ferralon-assay.yml`](.github/workflows/ferralon-assay.yml) now scans
+   `push: branches: [main]`, matching that default: the scan measures the **disposable** target,
+   and a push to the golden branch produces no scan run at all. The branch name is hardcoded
+   (a `branches:` filter cannot read `default_branch`), so if the default ever moves again,
+   update that filter in lockstep on **both** `vulnerable` and `main` — GitHub matches a push
+   filter against the workflow file on the *pushed* branch.
 2. ~~**Branch-protect `vulnerable`.**~~ **NOT POSSIBLE ON THIS PLAN — do not wait for it.**
    Verified 2026-07-21: both `repos/.../branches/vulnerable/protection` and `repos/.../rulesets`
    return **403 — "Upgrade to GitHub Pro or make this repository public to enable this

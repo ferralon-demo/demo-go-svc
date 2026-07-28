@@ -28,7 +28,7 @@ is closed to anything outside that allowlist by construction).
 ## Where the results go
 
 - **`report.json`** — the full scan result, persisted to the `refs/tegron/state` git ref 
-  on each default-branch (`vulnerable`) run, and uploaded as the `ferralon-scan-report` 
+  on each default-branch (`main`) run, and uploaded as the `ferralon-scan-report` 
   build artifact.
 - **The pivot Issue** — a pinned Issue summarizing the run and linking to the **Ferralon
   console**, where you can see the per-advisory reasoning, the call paths behind each
