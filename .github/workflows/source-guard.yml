@@ -52,10 +52,30 @@
 #     precisely how the `autoprove-fix` literal went stale — see THE CONDITION above). The
 #     behavioural honesty contract is the backstop that does not depend on a name.
 #
-# The DEEPEST guard is neither of these two CI jobs: it is the structural one — fire against a
-# freshly-reset `main`, never against `vulnerable`, so no fix-branch is ever produced against
-# the golden branch in the first place (DEMO.md, and the ABP-side `base_ref` default). CI here
-# is defence in depth behind that, not a replacement for it.
+# CORRECTION (2026-07-28) — this header previously claimed: "The DEEPEST guard is neither of
+# these two CI jobs: it is the structural one — fire against a freshly-reset `main`, never
+# against `vulnerable`, so no fix-branch is ever produced against the golden branch in the first
+# place." That claim was made in good faith and it is WRONG, so it is corrected here rather than
+# deleted. The structural rule is the INTENDED deepest guard, but it is not enforced anywhere:
+# the fix-PR base is taken from whatever GitHub reports as this repo's default branch, with no
+# check that it is not the golden branch, and the unattended path fires at whatever ref a
+# recorded scan run names. "Never fire at `vulnerable`" is a convention the pipeline is asked to
+# follow, not one it is made to follow.
+#
+# What actually protects the golden branch today, in order of weight:
+#   1. The repo's default_branch is `main` — EXTERNAL, MUTABLE GitHub configuration, not code.
+#      It is what the fix-PR base is read from, and what the scan's run-recording steps gate on.
+#      This is the single load-bearing item, and it lives in the settings UI, not in this repo.
+#   2. The scan no longer runs on a push to `vulnerable` (ferralon-assay.yml's push filter names
+#      `main`), so pushing the golden branch produces no scan run that could later be picked up
+#      as a fire target. Real and in-repo, but scoped to the push path — the daily schedule
+#      still runs against whatever branch is the default, so (1) backstops it.
+#   3. This guard, and the behavioural honesty contract — defence in depth, with the limits
+#      stated above. They remain worth keeping; they were never the foundation.
+#
+# The durable fix — the pipeline refusing to target a golden ref instead of trusting it not to —
+# is tracked on the backend side, not here. See DEMO.md § The protection posture and
+# docs/DECISIONS.md § A4 for the recorded decision.
 #
 # ─────────────────────────────────────────────────────────────────────────────────────────
 # ACTIVATION SEMANTICS — when this begins firing.

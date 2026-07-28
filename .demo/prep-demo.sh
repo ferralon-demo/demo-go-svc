@@ -6,7 +6,7 @@
 #   vulnerable  = the GOLDEN reference. Hand-curated, honestly-vulnerable code for every
 #                 demoed candidate (DoS unbounded sink, SSRF fetch route, the SSH hero, …)
 #                 plus the canary / FIRING.md contract. NEVER fired against. NEVER accepts a
-#                 merge. It cannot self-patch because nothing is ever merged into it.
+#                 merge — by convention and reactive CI, not by any hard gate.
 #   main        = the DISPOSABLE fire target. Reset FROM vulnerable before each demo, fired
 #                 against, then patched by the auto-prove fix-PR ("look — main is safe now").
 #                 The next reset wipes it back to the golden baseline.
@@ -14,9 +14,14 @@
 # This script performs that reset: it points `main` at `vulnerable`'s exact commit, so main's
 # tree is byte-identical to the golden baseline every single time — deterministic and
 # repeatable. A hard reset / force-push is used, NOT a merge: a merge accumulates history and
-# cannot cleanly re-introduce the vuln over a previously-patched main. Because vulnerable is
-# never fired against and never receives a fix-branch, self-patching (the 2026-07-13 saga where
-# an auto-prove DoS fix was merged into vulnerable via PR #9) is structurally impossible.
+# cannot cleanly re-introduce the vuln over a previously-patched main.
+#
+# This reset is what makes the demo repeatable. It is NOT, on its own, what stops the golden
+# branch self-patching (the 2026-07-13 saga where an auto-prove DoS fix was merged into
+# vulnerable via PR #9). An earlier version of this header called that outcome "structurally
+# impossible"; it is not. "Fire against main, never against vulnerable" is a convention the
+# pipeline is asked to follow, not one anything checks — see DEMO.md § The protection posture
+# for what is actually enforced, and docs/DECISIONS.md § A4 for the recorded correction.
 #
 # See DEMO.md for the full cycle and the Operator branch-protection handoff.
 #
@@ -47,7 +52,7 @@ for arg in "$@"; do
   case "$arg" in
     --execute)  EXECUTE=1 ;;
     --yes|-y)   ASSUME_YES=1 ;;
-    -h|--help)  sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)  sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "prep-demo: unknown argument: $arg (try --help)" >&2; exit 2 ;;
   esac
 done

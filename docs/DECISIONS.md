@@ -46,10 +46,16 @@ after its trigger fired).
 
   Nothing in this stack is cryptographic and nothing is a required-status gate. **State it
   this way; do not describe `vulnerable` as "protected" without qualification.**
+- **CORRECTION (2026-07-28) — the "Structural" row above is wrong.** The table's own top row
+  claims the structural rule is the **deepest** guard and that "no fix-branch is ever produced
+  against the golden branch in the first place." It is the *intended* deepest guard, but it is
+  **not enforced anywhere in code**. The entry is left as written — the claim was made in good
+  faith and the correction is itself the audit trail — and is superseded on that one point by
+  **A4** below. Read A4 before relying on this row.
 - **Revisit:** when this repository moves to a plan where branch protection / rulesets are
   available (or is made public) — at which point `vulnerable` should get a real protected-branch
   rule with the source guard as a **required** check, and this entry flips to `Superseded`.
-- **Status:** Accepted
+- **Status:** Accepted (the "Structural" row partially superseded by A4)
 - **Pointer:** [`.github/workflows/source-guard.yml`](../.github/workflows/source-guard.yml)
   (header) · [`.github/workflows/honesty-contract.yml`](../.github/workflows/honesty-contract.yml)
   · [`DEMO.md`](../DEMO.md) § The source guard (CI)
@@ -91,6 +97,59 @@ after its trigger fired).
   (see A1's revisit-trigger).
 - **Status:** Accepted
 - **Pointer:** [`DEMO.md`](../DEMO.md) § The source guard (CI) · this file, A1
+
+### A4 — The "structural" guard (fire against `main`, never `vulnerable`) is INTENDED, not enforced — and the assay no longer scans the golden branch
+
+- **Date:** 2026-07-28
+- **Decision:** restate the protection posture honestly, correcting **A1**'s "Structural" row
+  and the matching claims in `source-guard.yml`'s header, `DEMO.md` and `.demo/prep-demo.sh`.
+  The structural rule — *fire against a freshly-reset `main`, never against `vulnerable`* — is
+  the **intended** deepest guard and remains the right rule, but **nothing checks it**. It is a
+  convention the pipeline is asked to follow, not one it is made to follow. Concretely:
+  - the fix-PR **base** is read from whatever GitHub reports as this repository's
+    `default_branch` and used verbatim, with **no** validation that it is not the golden branch
+    — no denylist, no `base == "vulnerable"` check;
+  - the **unattended** path fires at whatever ref a recorded scan run names, with **no**
+    safe-ref default. (A safe-ref default exists only on the manual CLI path, and its override
+    is itself unvalidated.)
+
+  What actually protects `vulnerable` today, in order of weight:
+
+  | # | What holds | Nature |
+  |---|---|---|
+  | 1 | The repo's `default_branch` is `main` | **External, mutable GitHub configuration.** Not code, not in this repo, changeable in the settings UI with no review. The single load-bearing item. |
+  | 2 | The assay no longer scans `vulnerable` on push (this entry's change) | In-repo and real, but scoped to the **push** path — `schedule` always runs against whatever branch is currently default, so (1) still backstops it. |
+  | 3 | `source-guard.yml` — reactive close of an auto-prove-headed PR into `vulnerable` | Defence in depth, with A1/A2's documented limits. Unchanged. |
+  | 4 | `honesty-contract.yml` — behavioural drift detector | A **detector, not a blocker**. Unchanged. |
+
+- **Rationale — and a correction to the premise that prompted it.** The trigger for this entry
+  was the observation that `ferralon-assay.yml` still carried `push: branches: [vulnerable]`
+  long after `default_branch` moved to `main`, with the workflow's own comment warning to keep
+  the two in lockstep. Read first-hand on a real runner, the reachability was **narrower** than
+  first stated: the run-recording steps (`/runs` snapshot, pivot Issue, ingest POST) are gated
+  on `github.ref_name == github.event.repository.default_branch`, and on the 2026-07-22 push to
+  `vulnerable` (run `29887854582`) **all three were observed skipped** — so no run naming
+  `vulnerable` was in fact being recorded. The retarget is still the right change, for two
+  reasons that do not depend on the wrong premise: (a) it removes the push path entirely rather
+  than leaving it standing behind a single gate keyed on mutable external config, and (b) a
+  push to `main` — including the `prep-demo.sh` reset — previously triggered **no** assay run at
+  all, so the disposable target's baseline posture was refreshed only by the daily cron.
+- **Also recorded — the filter is now load-bearing, and branch-local.** GitHub matches a `push`
+  branch filter against the workflow file **on the pushed branch** (verified against this repo's
+  own run history: the only push-triggered assay run ever produced on `main`, run
+  `28380597892` at `bf2968b3`, came from a commit whose *own* copy of the workflow had a bare
+  `push:`). So the golden branch is excluded only while **its own** copy of `ferralon-assay.yml`
+  names `main` — hence the change lands on `vulnerable` as well as `main`. `.demo/prep-demo.sh`
+  resets `main` from `vulnerable`, so `vulnerable`'s copy is the one that survives.
+- **Revisit:** when the pipeline gains a real safe-ref policy — a validated fix-PR base and a
+  refusal to fire at a golden ref — this entry flips to `Superseded` and the structural rule can
+  honestly be called enforced. That work is tracked on the backend side, not in this repository.
+  Revisit sooner if `default_branch` is ever changed, which would re-open both paths at once.
+- **Status:** Accepted
+- **Pointer:** [`.github/workflows/ferralon-assay.yml`](../.github/workflows/ferralon-assay.yml)
+  (`on.push`) · [`.github/workflows/source-guard.yml`](../.github/workflows/source-guard.yml)
+  (header) · [`DEMO.md`](../DEMO.md) § The protection posture ·
+  [`.demo/prep-demo.sh`](../.demo/prep-demo.sh) (header) · this file, A1
 
 ---
 
