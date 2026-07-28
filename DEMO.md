@@ -118,10 +118,12 @@ so it never pollutes the scanned app surface.
 These are repo-settings changes only the Operator can make; they complete the model above and are
 what makes self-patching structurally impossible rather than merely convention:
 
-1. **Make `main` the default branch.** Keep `vulnerable` as a side branch. (`main` does not exist
-   yet — the first `prep-demo.sh --execute` creates it from `vulnerable`; then set it default.)
-   Note: [`.github/workflows/ferralon-assay.yml`](.github/workflows/ferralon-assay.yml) hardcodes
-   `push: branches: [vulnerable]`; if the default changes, review that filter in lockstep.
+1. ~~**Make `main` the default branch.**~~ **DONE** — `main` exists and is the default branch.
+   [`.github/workflows/ferralon-assay.yml`](.github/workflows/ferralon-assay.yml) now scans
+   `push: branches: [main]`, matching that default: the scan measures the **disposable** target,
+   and a push to the golden branch produces no scan run at all. The branch name is hardcoded
+   (a `branches:` filter cannot read `default_branch`), so if the default ever moves again,
+   update that filter in lockstep — it is what keeps the golden branch out of the run record.
 2. **Branch-protect `vulnerable`:** no direct pushes, no merges, and **explicitly block merges
    from `*-autoprove-fix-*`**. This is the guard that would have stopped PR #9.
 

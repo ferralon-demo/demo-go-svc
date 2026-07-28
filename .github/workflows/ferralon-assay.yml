@@ -33,19 +33,39 @@ on:
   # Top of funnel: the assessment is scheduled + on-demand dispatchable (the App will
   # dispatch on its own schedule; for the demo the daily cron + workflow_dispatch stand
   # in). A push also refreshes posture, and a pull_request is the per-change check. Which
-  # events MUTATE the repo singletons is decided by the default-branch gate below, not by
-  # this trigger list — so the triggers stay broad and the gate stays the single guard.
+  # events MUTATE the repo singletons is decided by the default-branch gate on the steps
+  # below — that gate remains the primary guard, but it is NOT the only one any more: the
+  # push filter is now load-bearing in its own right (see the push block).
   schedule:
     - cron: "17 7 * * *"   # daily, deliberately off the top of the hour
   workflow_dispatch:
   push:
-    # Scope push to the default branch so a branch that already has an open PR doesn't
-    # raise BOTH a push and a pull_request check on the same SHA (two identical "assess"
-    # checks). pull_request is the per-change check while a PR is open; this push refreshes
-    # the baseline posture once a change merges. NOTE: trigger branches: filters can't use a
-    # ${{ ...default_branch }} expression, so the default branch is hardcoded here — if the
-    # demo repo's default branch ever changes from "vulnerable", update this filter in lockstep.
-    branches: [vulnerable]
+    # Scope push to the DISPOSABLE default branch, `main`. Two separate things ride on this
+    # one filter — the second was added later and is the reason it is no longer cosmetic:
+    #
+    #   1. De-duplication. A branch that already has an open PR would otherwise raise BOTH a
+    #      push and a pull_request check on the same SHA (two identical "assess" checks).
+    #      pull_request is the per-change check while a PR is open; this push refreshes the
+    #      baseline posture once a change merges — and it is also what a
+    #      `.demo/prep-demo.sh --execute` reset of `main` fires, so a reset re-establishes
+    #      the demo target's baseline run instead of waiting for the next daily cron.
+    #
+    #   2. Keeping the GOLDEN branch out of the run record. This workflow reports its branch
+    #      as the scan's `revision`, and a downstream fire can target whatever ref a recorded
+    #      run names. `vulnerable` is the golden reference and must never be a fire target
+    #      (DEMO.md § The branch model), so a push to it must not produce a scan run at all.
+    #      GitHub matches this filter against the workflow file ON THE PUSHED BRANCH, so the
+    #      golden branch is excluded only while ITS OWN copy of this file also names `main`
+    #      here. Keep the two copies in agreement — `.demo/prep-demo.sh` resets `main` from
+    #      `vulnerable`, so `vulnerable`'s copy is the one that survives.
+    #
+    # branches: filters cannot use a ${{ ...default_branch }} expression, so the branch name
+    # is hardcoded — if this repo's default branch ever moves off "main", update this filter
+    # in lockstep. Note what this filter does NOT cover: `schedule` always runs from whatever
+    # branch is currently the default, so the golden branch's exclusion still depends on the
+    # repo's default_branch setting staying `main`. The honest, recorded posture is in
+    # docs/DECISIONS.md § A4 on the golden branch.
+    branches: [main]
   pull_request:
 
 permissions:
