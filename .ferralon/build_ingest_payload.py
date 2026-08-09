@@ -78,7 +78,7 @@ def main():
     with open(sys.argv[1], encoding="utf-8") as fh:
         report = json.load(fh)
 
-    if report.get("schema_version") != "tegron.report.v1":
+    if report.get("schema_version") not in ("tegron.report.v1", "tegron.report.v2"):
         sys.exit(
             f"build_ingest_payload: unexpected schema_version "
             f"{report.get('schema_version')!r}; refuse to project."
