@@ -97,10 +97,10 @@ jobs:
 
       - name: Run the Ferralon Assay
         id: scan
-        # Pinned, checksummed scanner delivery. `@vX.Y.Z` tag-pins the Action (the default:
-        # reproducible, license-clean; SHA-pinning is a security-team opt-in). The Action's
-        # own scanner-version + scanner-sha256 defaults pin the exact scanner bytes it fetches
-        # (transitive pin), and its drift guard fails the run loud on any checksum mismatch.
+        # Pinned scanner delivery. `@vX.Y.Z` tag-pins the Action (the default: reproducible,
+        # license-clean; SHA-pinning is a security-team opt-in) — that tag pin is the
+        # reproducibility guarantee. scanner-sha256 is an optional integrity opt-in, empty by
+        # default (fetch by scanner-version tag only; no baked checksum).
         uses: ferralon-ai/ferralon-assay@v0.3.0
         with:
           mode: baseline
