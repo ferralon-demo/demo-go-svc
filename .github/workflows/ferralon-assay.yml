@@ -102,7 +102,7 @@ jobs:
         # (transitive pin), and its drift guard fails the run loud on any checksum mismatch.
         # Pinned by commit SHA. The Action's own scanner-version + scanner-sha256
         # defaults pin the exact scanner bytes; no version is named here on purpose.
-        uses: ferralon-ai/ferralon-assay@v0.2.0
+        uses: ferralon-ai/ferralon-assay@v0.3.0
         with:
           mode: baseline
           target: .
