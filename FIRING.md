@@ -11,8 +11,16 @@ branches move.
 
 | Tag | Commit | Pins |
 |---|---|---|
-| [`poe`](https://github.com/ferralon-demo/demo-go-svc/tree/poe) | `8616dbab` | `vulnerable` branch tip (fireable, PoE) |
-| [`pone`](https://github.com/ferralon-demo/demo-go-svc/tree/pone) | `f2252151` | `proven-pone` branch tip (confirmed dark reproduction, PoNE) |
+| [`poe`](https://github.com/ferralon-demo/demo-go-svc/tree/poe) | `8616dbab` | `vulnerable`-branch ancestor, still vulnerable-shaped (fireable, PoE for CVE-2024-45337) |
+| [`pone-cve-2024-45337`](https://github.com/ferralon-demo/demo-go-svc/tree/pone-cve-2024-45337) | see `fix-cve-2024-45337` branch | the CORRECT CVE-2024-45337 fix: `x/crypto`→v0.31.0 + `handleSSHConn` reads `sconn.Permissions`, `ssh.go` kept intact (confirmed dark reproduction, PoNE) |
+
+**`pone` (published, STALE for this CVE — do not fire CVE-2024-45337 against it):** `pone` /
+`proven-pone` (`f2252151`) pins a fix for a *different, older* fixture (GO-2021-0113, the
+`x/text` BCP-47 parser fault) that deletes `ssh.go`/`fetch.go`/`expand.go`/`auth.go` entirely.
+Firing CVE-2024-45337 against it returns a **false PoNE** (`not_exploitable` because the code
+was removed, not because the bypass was patched). This PR does not move or delete the
+published `pone`/`proven-pone` tag/branch — re-pointing them for the prod fire lane to
+`pone-cve-2024-45337`'s commit is a separate, flagged action (see PR description).
 
 ## Recommended fire — CVE-2024-45337 (the hero, x/crypto/ssh authorization bypass)
 
@@ -75,13 +83,18 @@ authenticate with the user key, and land an admin session.
 
 ## PoNE second trace (proves the fix is not exploitable)
 
-- **Ref:** `patched` — fix **mode 1 (dependency version bump) + correct callback usage**:
-  `golang.org/x/crypto` → **v0.31.0** (which guarantees the last `PublicKeyCallback` is the
-  authenticating key) **and** `handleSSHConn` reads the role from
-  `sconn.Permissions.Extensions["role"]` instead of a callback side effect. The same crafted
+- **Ref:** `fix-cve-2024-45337` (tag `pone-cve-2024-45337`) — fix **mode 1 (dependency version
+  bump) + correct callback usage**: `golang.org/x/crypto` → **v0.31.0** and `handleSSHConn`
+  reads the role from `sconn.Permissions.Extensions["role"]` (bound to the authenticated key)
+  instead of the `recordedRole` side effect written for merely-offered keys. The same crafted
   trigger now lands a **user** session (its real identity); `read-seed` is denied and nothing
-  is beaconed → `not_exploitable`. The `patched` ref carries the same `Dockerfile`, so it
-  builds and runs identically (clean two-trace: predecessor fires, patched build dark).
+  is beaconed → `not_exploitable`. `ssh.go`, the routes, and the `Dockerfile` are unchanged, so
+  it builds and runs identically (clean two-trace: predecessor fires, fixed build dark).
+
+  **Correction:** the `patched`/`proven-pone` refs previously cited here for this trace are a
+  *different* fixture (GO-2021-0113, `x/text`) that deletes `ssh.go` outright — they do not
+  exercise this bypass at all and must not be pinned for CVE-2024-45337 (see "Pinned tags"
+  above).
 
 ## The other advisories (static verdicts — not fired)
 
