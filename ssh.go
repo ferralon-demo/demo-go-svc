@@ -60,24 +60,22 @@ func matchAuthorized(keys []authorizedKey, key ssh.PublicKey) (authorizedKey, bo
 
 var errUnauthorizedKey = errors.New("ssh: no matching authorized key")
 
-// serveSSH is the service's SSH-accepting entry point. It is wired the vulnerable
-// "last-key-wins" way that CVE-2024-45337 (golang.org/x/crypto/ssh < v0.31.0, authorization
-// bypass, CWE-863) describes: the per-connection PublicKeyCallback records the offered key
-// as a side effect, and the session's privilege is later derived from that recorded key
-// rather than from the *ssh.Permissions the library binds to the key that ACTUALLY completed
-// authentication.
+// serveSSH is the service's SSH-accepting entry point. Fixed for CVE-2024-45337
+// (golang.org/x/crypto/ssh < v0.31.0, authorization bypass, CWE-863): the connection's
+// privilege is read from sconn.Permissions, which the library binds to the key that
+// ACTUALLY completed authentication, never from a side-channel recording of a key merely
+// OFFERED during the query phase.
 //
-// Because PublicKeyCallback is invoked during the query phase for keys that are merely
-// OFFERED (before any signature is verified), the last key recorded here is not necessarily
-// the key the client authenticated with. An attacker who holds the low-privilege "user"
-// private key can first OFFER the (public, non-secret) "admin" key — driving the recorded
-// key to admin — and then complete authentication with the "user" key. The library correctly
-// authenticates them as "user", but this code reads the recorded admin key and grants an
-// admin session: the authorization bypass.
+// PublicKeyCallback is invoked during the query phase for keys that are merely offered
+// (before any signature is verified). An attacker who holds the low-privilege "user"
+// private key can still OFFER the (public, non-secret) "admin" key before completing
+// authentication with the "user" key — but because the role is read from
+// sconn.Permissions.Extensions, which the library binds only to the key that actually
+// authenticated, the offered-but-unauthenticated admin key confers nothing.
 //
-// This function establishes the genuinely reachable vulnerable path from a real listener. It
-// does not itself perform the bypass; whether the path is exploited is proven under
-// execution (see FIRING.md), never asserted here.
+// This function establishes the genuinely reachable path from a real listener. It does not
+// itself decide authorization; that the bypass no longer succeeds is proven under execution
+// (see FIRING.md), never asserted here.
 func serveSSH(addr string) {
 	// Ephemeral host key generated at startup — the fixture needs no committed host key.
 	_, hostPriv, err := ed25519.GenerateKey(rand.Reader)
@@ -113,22 +111,15 @@ func serveSSH(addr string) {
 func handleSSHConn(nConn net.Conn, hostSigner ssh.Signer, authKeys []authorizedKey) {
 	defer nConn.Close()
 
-	// recordedRole is the last-key-wins side effect: PublicKeyCallback writes it on every
-	// invocation. It is per-connection (captured by this closure), but it still tracks the
-	// last OFFERED key, not the key that completed authentication — the CVE-2024-45337 flaw.
-	recordedRole := "user"
-
 	config := &ssh.ServerConfig{
 		PublicKeyCallback: func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
 			ak, ok := matchAuthorized(authKeys, key)
 			if !ok {
 				return nil, errUnauthorizedKey
 			}
-			// VULNERABLE: derive and stash the connection's privilege from whatever key is
-			// currently being offered. The correct pattern is to return the role inside
-			// *ssh.Permissions and read it from sconn.Permissions after the handshake, so it
-			// is bound to the key that actually authenticated.
-			recordedRole = ak.role
+			// The role is returned inside *ssh.Permissions, which the library binds to the
+			// key that actually completes authentication (not merely offered during the
+			// query phase) — this is the fix for CVE-2024-45337.
 			return &ssh.Permissions{Extensions: map[string]string{"role": ak.role}}, nil
 		},
 	}
@@ -141,9 +132,10 @@ func handleSSHConn(nConn net.Conn, hostSigner ssh.Signer, authKeys []authorizedK
 	defer sconn.Close()
 	go ssh.DiscardRequests(reqs)
 
-	// VULNERABLE authorization decision: trust the recorded (last-offered) role instead of
-	// sconn.Permissions.Extensions["role"] (which the library bound to the verified key).
-	admin := recordedRole == "admin"
+	// FIXED authorization decision: read the role from sconn.Permissions, which the library
+	// bound to the key that actually authenticated, instead of a side-channel recording of
+	// the last key merely offered during the query phase.
+	admin := sconn.Permissions.Extensions["role"] == "admin"
 
 	for newChannel := range chans {
 		if newChannel.ChannelType() != "session" {

@@ -5,7 +5,7 @@ go 1.23
 require (
 	github.com/nanobox-io/golang-nanoauth v0.0.0-20160722212129-ac0cc4484ad4
 	github.com/prometheus/client_golang v1.11.1
-	golang.org/x/crypto v0.30.0
+	golang.org/x/crypto v0.31.0
 	golang.org/x/net v0.32.0
 )
 
