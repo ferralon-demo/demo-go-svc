@@ -22,10 +22,12 @@
 #
 # The scanner's OWN Tier-1 surfaces (its generic pinned Issue / sticky PR comment / SARIF
 # upload) are turned OFF — Ferralon owns the customer-facing surfaces (the pivot Issue
-# above). The scanner is DELIVERED by the pinned, checksummed `ferralon-ai/ferralon-assay`
-# Action (SHA-pinned below) which fetches a versioned scanner release at run time and
-# checksum-verifies it — no scanner binary is committed to this repo. (Previously the
-# binaries were vendored under bin/; that shortcut is retired — see FERRALON_SCAN.md.)
+# above). The scanner is DELIVERED by the pinned `ferralon-ai/ferralon-assay` Action
+# (tag-pinned below, the reproducibility guarantee) which fetches a versioned scanner
+# release at run time — no scanner binary is committed to this repo. Checksum
+# verification is an optional integrity opt-in (scanner-sha256), not on by default.
+# (Previously the binaries were vendored under bin/; that shortcut is retired — see
+# FERRALON_SCAN.md.)
 
 name: Ferralon Assay
 
@@ -97,11 +99,10 @@ jobs:
 
       - name: Run the Ferralon Assay
         id: scan
-        # Pinned, checksummed scanner delivery. `@<sha>` SHA-pins the Action; the Action's
-        # own scanner-version + scanner-sha256 defaults pin the exact scanner bytes it fetches
-        # (transitive pin), and its drift guard fails the run loud on any checksum mismatch.
-        # Pinned by commit SHA. The Action's own scanner-version + scanner-sha256
-        # defaults pin the exact scanner bytes; no version is named here on purpose.
+        # Pinned scanner delivery. `@vX.Y.Z` tag-pins the Action (the default: reproducible,
+        # license-clean; SHA-pinning is a security-team opt-in) — that tag pin is the
+        # reproducibility guarantee. scanner-sha256 is an optional integrity opt-in, empty by
+        # default (fetch by scanner-version tag only; no baked checksum).
         uses: ferralon-ai/ferralon-assay@v0.3.0
         with:
           mode: baseline
