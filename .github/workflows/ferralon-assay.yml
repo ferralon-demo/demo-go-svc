@@ -116,6 +116,9 @@ jobs:
           # posture). A PR run — github.ref_name is "<n>/merge" — stays stateless (no state-repo),
           # so it never overwrites the baseline. state-ref is the backend's cross-team contract ref.
           state-ref: refs/tegron/state
+          advisory-corpus-repo: ferralon-ai/vulnerability-corpus
+          advisory-corpus-ref: main
+          advisory-corpus-policy: published-24h
           state-repo: ${{ github.ref_name == github.event.repository.default_branch && github.repository || '' }}
           # Turn OFF the scanner's own customer-facing surfaces — Ferralon files its own pivot
           # Issue below. (The Action maps these onto the fetched build's toggle prefix.)
