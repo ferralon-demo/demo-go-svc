@@ -54,6 +54,11 @@ func expandHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid count", http.StatusBadRequest)
 		return
 	}
+	const maxAlloc = 100 * 1024 * 1024 // 100 MiB upper bound
+	if n < 0 || n > maxAlloc {
+		http.Error(w, "count out of range", http.StatusBadRequest)
+		return
+	}
 
 	// DoS sink: an attacker-sized allocation with no upper bound.
 	buf := make([]byte, n)
