@@ -104,7 +104,7 @@ jobs:
         # Scanner bytes still resolve exactly via the alias's leaf (scanner-version default).
         # scanner-sha256 is an optional integrity opt-in, empty by default (fetch by
         # scanner-version tag only; no baked checksum).
-        uses: ferralon-ai/ferralon-assay@v0.3
+        uses: ferralon-ai/ferralon-assay@v0.5
         with:
           mode: baseline
           target: .
